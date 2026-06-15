@@ -1,0 +1,29 @@
+---
+title: "Domain Authentication"
+description: "Authenticate your sending domain so campaigns are delivered with stronger trust and alignment."
+---
+
+## What You Configure
+
+Domain authentication usually includes DNS records that prove Onchain Suite is authorized to send on behalf of your domain.
+
+## Setup Flow
+
+1. Open the project domain settings.
+2. Add the domain you plan to send from.
+3. Copy the DNS records shown in the setup flow.
+4. Add the records in your DNS provider.
+5. Wait for propagation and re-check verification.
+
+## Common DNS Records
+
+- SPF records identify authorized sending infrastructure.
+- DKIM records sign outgoing mail.
+- DMARC records define how receiving providers handle failures.
+
+## Troubleshooting Tips
+
+- Double-check for missing quotes or trailing characters.
+- Make sure records are added to the correct host.
+- Allow time for propagation before retrying verification.
+- Remove conflicting legacy records if your DNS provider recommends it.

@@ -1,0 +1,22 @@
+---
+title: "Overview"
+description: "Build on Onchain Suite with wallet-aware auth patterns, webhook ingestion, and safe integration guidance."
+---
+
+## What This Section Covers
+
+These developer docs explain how to connect systems safely to Onchain Suite without turning the docs into a raw endpoint catalog.
+
+## What To Expect
+
+- Authentication guidance for browser, embedded, and server-to-server use cases
+- Webhook patterns for sending lifecycle events into the platform
+- Rate-limit and reliability guidance for production integrations
+
+## Integration Model
+
+Most implementations follow a simple pattern:
+
+1. Authenticate in the right context.
+2. Send events or identity signals into Onchain Suite.
+3. Let campaigns, audiences, and automations operate on the normalized result.

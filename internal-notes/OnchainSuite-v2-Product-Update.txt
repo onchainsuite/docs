@@ -1,0 +1,1447 @@
+# V2
+
+TL;DR
+
+* A wallet is the identity. Email is one of N channels, not a prerequisite.
+
+* Multi-channel activation: in-app push (priority 1), email, Telegram, Farcaster, X.
+
+* Protocol Plays library: 8 pre-built, fork-and-edit automations — split into Starter (works on day one) and Advanced (requires data maturity or specific protocol features).
+
+* First-mile rebuilt to deliver one valuable cohort insight in under 10 minutes — with a forward-looking insight template for protocols that don't yet have enough data for a backwards-looking cohort.
+
+* Privacy/ZK remains central wherever a regulated channel is involved. Wallets are public; email, FID, X handle, and similar PII are still bridged via zero-knowledge proofs, GDPR-compliant by architecture.
+
+## **What's changing and why**
+
+The settled 7-category IA stays. The internal engines (R3tain, 3ridge, Onch3n) remain absorbed and invisible to the user. This update reshapes four things on top of that foundation.
+
+| Area | Before | After |
+| :---- | :---- | :---- |
+| **Identity** | Wallet must be matched to an email before the product is useful. | Wallet is the identity from minute one. Channel-specific resolution happens lazily. |
+| **Channels** | Email-only activation. | In-app push, email, Telegram, Farcaster, X — same trigger, fan-out delivery. |
+| **Automations** | Blank canvas. User assembles flow from scratch. | Protocol Plays library: pre-wired triggers, segments, copy. User forks and edits. |
+| **First-mile** | Connect → set up identity → import audience → build flow → maybe see value. | Connect → auto-index → see one valuable cohort insight in under 5 minutes, before any campaign. |
+
+# **1\.  Wallet-First Identity**
+
+The wallet is the canonical user record. Other identifiers (email, Farcaster FID, X, ENS) are attached to the wallet record as channel handles, present or absent, and resolved lazily when a channel needs them.
+
+### **Build implications**
+
+* **Audience profile schema:** walletAddress is the primary key. email, farcaster, x, fids, and ens are arrays of {value, source, verifiedAt, optInAt}.
+
+* **Drop the requirement that a contact has an email to be “valid.”** A wallet with zero linked channels is a valid contact — it just has fewer reachable channels.
+
+* **Wallet-Email Synthesis stops being a blocking onboarding step.** It becomes a background quality job that incrementally raises match rates as protocols connect X OAuth, upload CSVs, etc.
+
+* **Channel-aware segments.** “reachable on in-app push” is a different filter from “has email.”
+
+### **Privacy & ZK — what changes, what doesn't**
+
+Wallet addresses are public by nature, so wallet-first identity does not soften privacy guarantees. The ZK identity bridge remains central wherever a regulated channel is involved.
+
+| Wallet handles → public, indexed directly. Email / FID / X / Discord handles → still bridged via zero-knowledge proofs. We verify the link to a wallet without storing the underlying PII in a way that exposes it. GDPR-compliant by architecture, opt-in by user. *This is the meaningful split: wallet-first does not weaken our privacy story. It clarifies where ZK matters and where it doesn't.* |
+| :---- |
+
+### **Channel resolution table**
+
+| Channel | Identifier needed | Source | Reachability if no extra data |
+| :---- | :---- | :---- | :---- |
+| **In-app push** | Wallet address only | dApp's connected session | 100% of connected wallets |
+| **Email** | Email address | ZK synthesis · CSV · OAuth | Depends on synthesis (target ≥60%) |
+| **X** | X profile handle | X OAuth | Depends on synthesis (target ≥60%) |
+| **Farcaster** | FID | Wallet → FID lookup (Neynar) | Subset; growing |
+| **Telegram** | Channel ID or user opt-in | Bot in protocol's group | Channel-level immediate; user-level requires opt-in |
+
+# **2\.  Multi-Channel Activation**
+
+The Automation flow builder gains channel-specific delivery nodes. Same trigger, same segment, multiple destinations. The Intelligence layer routes a single event to whichever channels are configured and reachable for the wallet.
+
+### **In-app push (priority 1, ship first)**
+
+The fastest channel to ship and the highest-leverage one for retention. No DNS, no SES, no domain warm-up. Build it first.
+
+* **Triggered by:** any on-chain behaviour the protocol cares about (deposit, swap, mint, vote, position-change, liquidation-risk).
+
+* **Delivery surface:** a TS SDK, the protocol drops into their dApp. SDK opens a websocket, OnchainSuite pushes payloads, SDK renders an in-app toast / modal / banner.
+
+* **Identity:** wallet address — already present in the dApp's connected session. No extra identifier needed.
+
+* **Targeting:** same segment engine as email. Trigger and segment definitions are reused; only the delivery node differs.
+
+* **Templates:** minimal HTML / markdown components (toast, banner, modal). Protocol can override styling via SDK theme tokens.
+
+### **Channel build order**
+
+* In-app push — priority 1, ship in v2.0.
+
+* Email — already in build. Continues per existing email-layer doc.
+
+* Telegram channel announcement (bot in protocol's group) — priority 2, v2.1.
+
+### **Build implications**
+
+* **Automation flow node taxonomy:** “Send Email” becomes one of {Send Email, Send In-App Push, Post to Discord, Post to Telegram, Post to Farcaster}. Each is a sibling node type with a shared trigger / segment input contract.
+
+* **Per-channel delivery service in the backend.** Email service stays as-is. Add InAppPushService, DiscordService, TelegramService, FarcasterService — each with the same input contract: { walletAddresses, payloadTemplate, automationId }.
+
+* **Per-channel analytics.** “Sent · Delivered · Opened · Clicked” applies to email. In-app push needs “Delivered · Viewed · Dismissed · Clicked.” Discord/Telegram channels need “Posted · Reactions · Replies.” Analytics schema accommodates per-channel event types.
+
+# **3\.  Protocol Plays Library**
+
+Replace the blank-canvas Automation flow builder for the default new-user experience. New users see a Plays gallery first; the blank builder is the “start from scratch” option, not the front door.
+
+### **Anatomy of a Play**
+
+* **Trigger:** pre-wired on-chain or behavioural event (e.g., “first deposit \> $1k”)
+
+* **Segment:** default rule the protocol can edit (e.g., “all wallets that deposited in the last 24h”)
+
+* **Channel(s):** default channel preference, can be overridden
+
+* **Copy template:** subject lines \+ body with web3 dynamic blocks ({{wallet.last\_position}}, {{chain.gas\_today}})
+
+* **Recommended timing:** delays, send-time logic
+
+* **Peer benchmark:** “protocols using this Play see 28-34% open rate” — drawn from Datum's cross-protocol data
+
+### **Tiers — Starter and Advanced**
+
+Every Play is tagged in the gallery with a tier. The tier determines default sort order, recommendation logic during onboarding, and the “Ready to fork” vs “Needs setup” label shown in the Play card.
+
+| STARTER | Forkable on day one. Works for any protocol with the relevant primitive (a deposit, a stake, a wallet). Doesn't require pre-existing TVL, an active governance system, or a quest framework. Default-recommended in onboarding. |
+| :---- | :---- |
+| **ADVANCED** | **Requires data maturity, protocol-specific structure, or manual setup.** Example: Governance Vote Reminder needs an active proposals contract; Whale Concierge needs a meaningful TVL distribution; Smart Contract Upgrade Notice is manually triggered. Surfaced in the gallery but never the default recommendation for a freshly-onboarded protocol. |
+
+### **v2.0 Plays — ship all eight**
+
+| Play | Tier | Trigger | Default channel | Steps |
+| :---- | :---- | :---- | :---- | :---- |
+| **First Deposit Welcome** | **Starter** | First successful deposit to the wallet | In-app push \+ email | 3-step: welcome → educational → ask for feedback |
+| **Churn Win-Back** | **Starter** | Wallet inactive 30 / 60 / 90 days | Email \+ in-app on next visit | 3-step ladder by inactivity tier |
+| **LP Unbonding Reminder** | **Starter** | Cooldown ends in 24h | In-app push | 1-step: action reminder |
+| **Governance Vote Reminder** | **Advanced** | New proposal · 24h before quorum | In-app \+ TG channel | 1-step: reminder with vote CTA |
+| **Whale Concierge** | **Advanced** | Wallet crosses $X TVL threshold | Email (white-glove) | 1-step: VIP outreach |
+| **Liquidity Migration Alert** | **Advanced** | v1 LP still active 7d after v2 launch | Email \+ in-app | 2-step: notify \+ how-to-migrate guide |
+| **Smart Contract Upgrade Notice** | **Advanced** | Manual trigger by the protocol team | Email \+ in-app \+ TG channel | 1-step: signed audit-grade notice |
+| **Quest / Referral Invite** | **Advanced** | Active wallet w/o quest enrollment | In-app \+ Farcaster cast \+ TG channel | 2-step: invite \+ nudge |
+
+*Default gallery order: Starter Plays appear first, sorted by relevance to the protocol type detected during onboarding. Advanced Plays are visible but require an explicit “Show advanced” toggle on the gallery for first-week users.*
+
+### **Build implications**
+
+* **Plays live in code:** versioned, typed objects, not user-generated automations stored in DB. A Play is a YAML/JSON spec the Automation engine instantiates as a real, editable automation when forked.
+
+* **Tier is a field on the Play spec.** Adding a new Play requires explicit tier classification at definition time. Tier feeds the gallery's recommendation algorithm and the post-fork “You're ready to ship” vs “You'll need to connect X first” message.
+
+* **Forking a Play** creates a new Automation record initialised from the Play spec. Edits diverge from the spec from that point. Track originPlayId and originPlayTier for telemetry.
+
+* **Peer benchmarks** are computed across protocols (anonymised, opt-in). Backend job aggregates per-play open / click / conversion stats and serves them to the Plays gallery \+ post-send analytics.
+
+* **The Plays gallery** becomes the default landing for the Automations section when the user has zero automations. Show a personalised recommendation order based on the protocol type detected during onboarding.
+
+# **4\.  First-Mile Onboarding**
+
+Goal: protocol sees one specific, valuable insight in under 10 minutes — before they build anything.
+
+### **The 5-step path**
+
+| \# | Step | What happens | Time |
+| :---- | :---- | :---- | :---- |
+| **1** | **Connect** | Pick chain(s); paste protocol contract address(es). Optionally connect the wallet for self-attribution. | \~30 sec |
+| **2** | **Auto-index** | Backend pulls the last 90 days of normalised events. Runs in the background; user moves on. | \~3 min (bg) |
+| **3** | **Aha moment** | Auto-generated cohort report shown without user action. Two templates depending on data depth — see below. *One CTA: “Reach these wallets with an in-app push when they next connect” — no email required.* | **at minute 3-5** |
+| **4** | **Pick a Play** | From the Plays gallery, fork the recommended Starter Play. Review pre-filled trigger, segment, and copy. Optional: connect TG OAuth, upload email list, install in-app SDK. | \~1 min |
+| **5** | **Send test** | Send to a test wallet. In-app push fires immediately if the SDK is installed; email fires if an email is available. | \~30 sec |
+
+### **Aha moment — two templates**
+
+The Aha moment generator picks between two cohort report templates based on data depth at index time. The split is what makes the under-10-minute promise hold for both established protocols and freshly-launched ones — exactly the protocols most likely to sign up for early access.
+
+| Template | When it fires \+ what it says |
+| :---- | :---- |
+| **Backward-looking (default)** | **Triggered when protocol has ≥100 unique active wallets and ≥30 days of indexed history.** Picks the highest-signal cohort from a fixed library: dormant LPs, whale recent activity, near-churn, high-value not-yet-rewarded, multi-protocol overlap. *Example: “142 dormant LPs from the last 30 days. Median lifetime deposit $4.2k. 38 are also active on Aave.”* |
+| **Forward-looking (thin-data)** | **Triggered when the protocol has fewer than 100 wallets or fewer than 30 days of indexed history.** Projects cohort behaviour forward using cross-protocol benchmarks. Frames the insight as a near-future event the protocol can act on now, not a past cohort that's too small to be meaningful. **Example A — Cohort projection:** *“Your earliest 24 wallets reach the 30-day mark on May 28\. At benchmark re-engagement rates for protocols in your category, roughly 14 will go dormant unless reached before then. We can fire the Churn Win-Back Starter Play the moment that 30-day threshold is hit — set it up now and walk away.”* **Example B — Behavioural overlap:** *“Of your 80 wallets, 31 also hold positions on a comparable protocol (cross-checked from public on-chain data). They're already familiar with this primitive — they're your most likely retention save and your most likely referral source. The Quest Play targets them as a starting segment.”* **Example C — Pacing baseline:** *“You're 11 days in. Across 40+ protocols at your stage, the median first-month dropout rate is 38%. Setting up First Deposit Welcome and LP Unbonding Reminder now (both Starter Plays, both work from day one) typically reduces this by 12-18 points.”* |
+
+| Why this matters: the protocols most likely to sign up for early access are pre-PMF or recently-launched. A backward-looking cohort report is impossible for them. The forward-looking template lets us deliver a meaningful Aha at minute 5 even when the protocol has 80 wallets, not 8,000. It also positions OnchainSuite from day one as predictive infrastructure, not just a dashboard. |
+| :---- |
+
+### **Build implications**
+
+* **Auto-index pipeline** must handle major DeFi/NFT contract types out of the box (ERC20 transfer, Uniswap-style swaps, Aave/Compound deposit/borrow, ERC721 mint/transfer, governance vote). Use the existing Protocol Normalisation System.
+
+* **Aha-moment generator** is a server-side job that runs once after auto-index completes. Routes to backward-looking or forward-looking template based on wallet count and history depth thresholds (configurable; default ≥100 wallets AND ≥30 days \= backward, otherwise forward).
+
+* **Forward-looking template requires cross-protocol benchmark data** as input. This means the peer benchmark aggregation job (originally scoped to v2.2) needs a v0 in v2.0 — even a coarse “median dropout by protocol type” dataset is enough. Surface this dependency to engineering early.
+
+* **Aha-moment surfaces inline** in the Home dashboard, not as a pop-up. User sees it the moment auto-index finishes.
+
+* **Email/Discord OAuth and in-app SDK install** happen at step 4, not as a gating onboarding requirement.
+
+* **Onboarding telemetry:** track step 1→3 completion rate, time-to-aha, fork rate from Aha moment to a Play, and Aha-template-served (backward vs forward) as a dimension on every funnel metric. These are the north-star metrics for first-mile success.
+
+# **Build Sequence**
+
+Suggested order. Each milestone is shippable on its own. v2.0 is split into v2.0a and v2.0b to de-risk the schema refactor and the SDK build. Both sub-milestones ship within the original v2.0 window (Sprints 1-2).
+
+| Milestone | Theme | Contents | Eta |
+| :---- | :---- | :---- | :---- |
+| **v2.0a** | **Foundation** *Wallet schema \+ Aha moment \+ Starter Plays via existing channels* | Refactor profile schema to wallet-primary (all downstream queries audited) Auto-index pipeline \+ Aha moment generator (both backward and forward templates) Peer benchmark v0 dataset (median-rate seed data per protocol type) First three Starter Plays (First Deposit Welcome, Churn Win-Back, LP Unbonding) shipped via existing email channel Telemetry: time-to-aha, fork rate, Aha-template-served | **Sprint 1** |
+| **v2.0b** | **Channels & Library** *In-app push \+ Plays gallery \+ Advanced Plays* | Ship in-app push channel \+ JS SDK (npm \+ script-tag distribution, websocket primary) Plays gallery UI with Starter/Advanced tier filter Remaining five Advanced Plays (Governance, Whale, Migration, Upgrade Notice, Quest) Per-channel analytics: in-app delivered / viewed / dismissed / clicked | **Sprint 2** |
+| **v2.1** | **X \+ Telegram channels** | X access, Telegram channel bot Multi-channel routing in the Automation node Per-channel analytics in the dashboard | Sprint 3 |
+| **v2.2** | **Farcaster \+ Peer benchmarks** | Farcaster cast scheduling Cross-protocol benchmark aggregation job (full version, replacing v0 seed data) Benchmark display in Plays gallery and post-send analytics | Sprint 4 |
+
+| Why the split: the profile schema refactor touches every downstream query and is the highest-risk piece of work in v2.0. By isolating it in v2.0a alongside the Aha moment (which is purely backend), Sprint 1 can ship end-to-end through existing channels and prove the wallet-first thesis before the SDK build begins. v2.0b then runs Sprint 2 with clean dependencies: in-app push, the gallery UI, and the Advanced Plays — none of which can land before the schema work is done anyway. |
+| :---- |
+
+# **Open Questions**
+
+* **In-app SDK distribution:** npm package vs script tag vs both? (Recommend both — npm for dApps with bundlers, script tag for legacy.)
+
+* **In-app push delivery:** websocket vs SSE vs polling fallback? (Recommend websocket primary, polling fallback.)
+
+* **Plays storage:** bundle in repo as YAML, or store in DB seeded at deploy? (Recommend repo \+ seed — versioning is easier in code.)
+
+* **Forward-looking Aha thresholds:** where exactly is the cutover between backward and forward templates? Defaults proposed: \<100 wallets OR \<30 days indexed \= forward. Worth A/B testing once we have enough early access protocols.
+
+* **Peer benchmarks opt-in UX:** explicit toggle in onboarding vs default-on with opt-out? (Recommend default-on, opt-out, anonymised — but flag for legal review and add a clear data-use page accessible from onboarding.)
+
+* **Channel preference precedence** when wallet is reachable on multiple: hard-coded order vs protocol setting vs per-Play override? (Recommend per-Play override with sensible defaults.)
+
+* **Tier upgrade path:** as a protocol matures, should Starter Plays auto-suggest upgrades to Advanced Plays (e.g., “you now have 50 wallets above your whale threshold — set up Whale Concierge”)? Worth scoping for v2.1.
+
+*End of document  ·  OnchainSuite v2 Product Update  ·  Datum Labs Engineering*
+
+# Pricing
+
+# **Unit Economics Model — 500 Protocols @ 100k Subscribers Each (Monthly)**
+
+Date: 2026-05-26
+
+This document estimates monthly operating costs for hosting **500 protocols**, each with **100,000 subscribers**, sending **100,000 emails per protocol per month**, plus Discord \+ Telegram notifications.
+
+It uses public list pricing where available and fills gaps with explicit assumptions so you can swap numbers easily.
+
+## **1\) Workload Assumptions**
+
+* Protocols (tenants): P \= 500  
+* Subscribers per protocol: S \= 100,000  
+* Total subscribers: P × S \= 50,000,000 contacts  
+* Emails per protocol per month: E\_p \= 100,000  
+* Total emails per month: E \= P × E\_p \= 50,000,000  
+* Avg email payload billed size (HTML+headers+inline assets, excluding attachments): **100 KB** (0.1 MB) (assumption)  
+* Discord \+ Telegram notifications:  
+  * Case A (broadcast): N\_p \= 100,000 notifications per protocol **total across both channels** (assumption)  
+  * Case B (per channel): N\_p \= 100,000 notifications per protocol **per channel** (assumption)  
+  * Total monthly notifications:  
+    * Case A: N \= 50,000,000 notifications  
+    * Case B: N \= 100,000,000 notifications
+
+## **2\) Cost Drivers (What actually costs money)**
+
+### **A) Email sending (Azure Communication Services Email)**
+
+Azure ACS Email pricing (example doc): **$0.00025 per email sent** and **$0.00012 per MB transferred**.acs\_email\_pricing
+
+**Monthly email cost (send):**
+
+* C\_email\_send \= E × 0.00025  
+* With E \= 50,000,000 → C\_email\_send \= $12,500
+
+**Monthly email cost (data transferred):**
+
+* C\_email\_data \= (E × avg\_email\_mb) × 0.00012  
+* With avg\_email\_mb \= 0.1 → 50,000,000 × 0.1 × 0.00012 \= $600
+
+**Estimated Azure Email total (monthly):**
+
+* C\_email\_total ≈ $13,100
+
+Notes:
+
+* This excludes inbox/mailbox hosting (e.g., Microsoft 365), dedicated IP warmup, and any third-party deliverability tooling.
+
+### **B) Database (Neon Postgres)**
+
+Neon list pricing (Launch/Scale) includes **$0.35 per GB-month storage** and **$0.106–$0.222 per CU-hour compute** depending on tier.neon\_pricing
+
+At this scale, the DB sizing is dominated by:
+
+* Contacts table size \+ indexes (50M rows)  
+* Event tables (email delivery events can become huge if stored per-recipient)  
+* Segmentation queries / analytics workloads
+
+**Storage sizing (illustrative, you should measure your real row sizes):**
+
+* Contacts: assume \~ **1 KB per contact row including index overhead** → \~50 GB  
+* Delivery events (if persisted per email recipient):  
+  * 50M rows/month; even **200 bytes/row** → 10 GB/month (and grows with retention)  
+* Other tables \+ indexes \+ bloat \+ PITR history → often **2×–5×** your “raw” table estimate
+
+**Example Neon storage assumption (monthly):**
+
+* DB\_storage \= 400 GB (assumption)  
+* C\_db\_storage \= 400 × 0.35 \= $140
+
+**Compute assumption:**
+
+* Let average compute be CU\_avg running 24/7  
+* Monthly CU-hours ≈ CU\_avg × 730  
+* C\_db\_compute \= (CU\_avg × 730\) × price\_per\_CU\_hr
+
+Example:
+
+* CU\_avg \= 32 CU, price \= $0.222/CU-hr (Scale) → 32×730×0.222 ≈ $5,186
+
+**Estimated Neon total (monthly, example):**
+
+* C\_db\_total ≈ $5,326 (compute \+ storage)
+
+### **C) Queue/Rate-limiting (Upstash Redis)**
+
+Upstash Redis pay-as-you-go list pricing: **$0.20 per 100k commands**, storage **$0.25/GB**, bandwidth free up to thresholds.upstash\_pricing
+
+BullMQ typically uses multiple Redis commands per email job (enqueue, fetch, ack, retry, delayed, etc.). A conservative range:
+
+* commands\_per\_email\_job \~ **10–30** (assumption)
+
+If you enqueue one job per email:
+
+* redis\_commands \= E × commands\_per\_email\_job  
+* For E=50M:  
+  * Low: 50M×10 \= 500M commands  
+  * High: 50M×30 \= 1.5B commands
+
+Cost:
+
+* C\_redis \= (redis\_commands / 100,000) × 0.20  
+  * Low: (500M/100k)\*0.2 \= **$1,000**  
+  * High: (1.5B/100k)\*0.2 \= **$3,000**
+
+Storage is usually small vs commands unless you store large payloads in Redis.
+
+### **D) App hosting / workers (Render)**
+
+Render list pricing for always-on services (monthly) includes:
+
+* Starter $7, Standard $25, Pro $85, Pro Ultra $450, etc.render\_pricing
+
+At this scale, your biggest compute costs are:
+
+* API servers  
+* Background workers (email dispatch, webhooks, inbox polling, etc.)  
+* WebSocket gateways
+
+Because instance counts depend heavily on your throughput, here’s a placeholder:
+
+* Assume N\_api \= 6 × Pro Ultra ($450) for API/websocket  
+* Assume N\_workers \= 10 × Pro Ultra ($450) for worker fleet  
+* C\_render \= (6+10) × 450 \= $7,200
+
+You can model alternatives:
+
+* If you can run on fewer/lower instances, reduce this linearly.
+
+### **E) Frontend hosting (Vercel)**
+
+Vercel Pro starts at **$20/month** (plus usage), and includes **10M Edge Requests/month** and **1TB Fast Data Transfer/month**. Overages start at **$2 per 1M Edge Requests** and **$0.15 per GB** of Fast Data Transfer.vercel\_pricing
+
+There are two very different cost profiles depending on what your “frontend” serves:
+
+**Scenario 1 — protocol operator dashboard only (typical B2B SaaS):**
+
+* Traffic is mostly from a few thousand internal users (protocol teams), not all subscribers.  
+* Vercel costs are usually dominated by **seats** (developer seats) and modest bandwidth.  
+* Example placeholder: vercel\_monthly \= $200–$1,000 (depends on seats \+ usage).
+
+**Scenario 2 — subscriber-facing web app (50M end-users hitting Vercel):**
+
+* Edge Requests and bandwidth can dominate quickly.  
+* Back-of-envelope if each subscriber loads 3 pages/month and each page triggers \~5 edge requests:  
+  * Edge requests/month ≈ 50M × 3 × 5 \= 750M  
+  * Overage (beyond 10M included) ≈ 740M / 1M × $2 ≈ $1,480  
+* If average transferred bytes is 1 MB per subscriber per month:  
+  * Data transfer/month ≈ 50M MB \= 50,000 GB  
+  * Overage (beyond 1TB included) ≈ 49,000 GB × $0.15 ≈ $7,350
+
+Because your prompt focuses on “subscribers” (contacts) and not “monthly active web users”, treat Scenario 2 as a stress-case unless your product is actually subscriber-facing.
+
+### **F) Discord \+ Telegram notifications**
+
+Discord and Telegram bot APIs don’t usually charge per message. Your main costs are:
+
+* Compute to generate/send messages  
+* Egress bandwidth  
+* Operational complexity/rate limiting
+
+For cost modeling, treat them as “compute/egress included in hosting” unless you use a paid messaging provider.
+
+### **G) GoldRush (Covalent)**
+
+GoldRush provides multichain data and has plan-based pricing; treat it as a fixed monthly line item unless you have a known “per-credit” cost. The docs list rate limits by plan (e.g., 4 RPS vs 50 RPS).goldrush\_overview
+
+For this model:
+
+* C\_goldrush \= $250/mo (placeholder; replace with your contract)
+
+## **3\) Monthly Cost Summary (Example)**
+
+This is a “reasonable first-pass” estimate using the assumptions above.
+
+| Category | Monthly cost (low) | Monthly cost (high) | Notes |
+| :---- | ----: | ----: | :---- |
+| Azure Email (send \+ data) | $12,800 | $15,000 | Mostly linear with email count and payload sizeacs\_email\_pricing |
+| Neon Postgres | $3,000 | $12,000 | Depends on compute sizing \+ retention \+ query patternsneon\_pricing |
+| Upstash Redis | $1,000 | $3,000 | Sensitive to “commands per job” and queue designupstash\_pricing |
+| Render compute | $2,000 | $10,000 | Depends on service count \+ sizerender\_pricing |
+| Vercel frontend | $200 | $9,000 | Seats \+ Edge Requests \+ bandwidth (depends on whether subscribers hit Vercel)vercel\_pricing |
+| GoldRush | $250 | $2,000+ | Replace with your plan/contractgoldrush\_overview |
+| Misc (logging, monitoring, domains) | $200 | $2,000 | Varies widely |
+| **Total** | **\~$19,450** | **\~$43,000+** | Excludes payroll/overhead |
+
+**Reality check:** with 50M contacts and 50M emails/month, the “shape” of costs is dominated by **email sending** \+ **compute** \+ **data retention strategy**.
+
+## **4\) Cost Per Unit (Example)**
+
+With total monthly cost C\_total:
+
+* Cost per protocol per month: C\_total / P  
+  * Low: 19,450 / 500 \= **$38.90**  
+  * High: 43,000 / 500 \= **$86.00**  
+* Cost per subscriber per month: C\_total / (P×S)  
+  * Low: 19,450 / 50,000,000 \= **$0.000389**  
+  * High: 43,000 / 50,000,000 \= **$0.00086**  
+* Cost per email: C\_total / E  
+  * Low: 19,450 / 50,000,000 \= **$0.000389**  
+  * High: 43,000 / 50,000,000 \= **$0.00086**
+
+Note: “cost per email” includes all infra, not only the email provider line.
+
+## **5\) Revenue \+ Profit Margin Scenarios**
+
+You didn’t specify pricing, so here are common pricing strategies. Replace price\_per\_protocol with your real plan.
+
+Let:
+
+* Monthly revenue R \= P × price\_per\_protocol  
+* Gross profit GP \= R \- C\_total  
+* Gross margin GM \= GP / R
+
+### **Scenario A: $199 / protocol / month (flat)**
+
+* R \= 500 × 199 \= $99,500  
+* GP (low cost): 99,500 \- 19,450 \= $80,050  
+* GP (high cost): 99,500 \- 43,000 \= $56,500  
+* Margin (low cost): 80,050 / 99,500 \= 80.5%  
+* Margin (high cost): 56,500 / 99,500 \= 56.8%
+
+### **Scenario B: $499 / protocol / month (flat)**
+
+* R \= 500 × 499 \= $249,500  
+* GP (low cost): 249,500 \- 19,450 \= $230,050  
+* GP (high cost): 249,500 \- 43,000 \= $206,500  
+* Margin (low cost): 230,050 / 249,500 \= 92.2%  
+* Margin (high cost): 206,500 / 249,500 \= 82.8%
+
+### **Scenario C: Usage-based (base \+ email overage)**
+
+Example pricing:
+
+* Base: $99 / protocol  
+* Email: $0.0010 per email sent (pass-through \+ margin)
+
+Revenue:
+
+* Base: 500×99 \= $49,500  
+* Email: 50,000,000×0.0010 \= $50,000  
+* Total R \= $99,500
+
+Profit and margin using this doc’s cost range:
+
+* GP (low cost): 99,500 \- 19,450 \= $80,050  
+* GP (high cost): 99,500 \- 43,000 \= $56,500  
+* Margin (low cost): 80,050 / 99,500 \= 80.5%  
+* Margin (high cost): 56,500 / 99,500 \= 56.8%
+
+Note: if you price email overage close to your provider cost (e.g., $0.0003–$0.0005), your margin will compress quickly because email \+ queueing are the dominant variable costs at this scale.
+
+## **6\) Biggest Hidden Cost Risks (at this scale)**
+
+1. **Storing per-recipient delivery events in Postgres**  
+   * 50M rows/month grows extremely fast with retention.  
+   * Consider TTL/partitioning or moving high-volume event telemetry to cheaper storage.  
+2. **Queue design**  
+   * One Redis job per recipient can become expensive and operationally heavy.  
+   * Batch jobs (e.g., 1 job \= 1k recipients) dramatically reduce Redis ops.  
+3. **Email deliverability**  
+   * Deliverability engineering (warming, complaint handling, bounce processing, domain reputation) can add both tooling costs and engineering time.  
+4. **Network egress**  
+   * Email payloads, webhook callbacks, and analytics export can make egress non-trivial.
+
+## **7\) Quick Calculator (edit these numbers)**
+
+Replace the values below and recompute:
+
+* E \= 50,000,000  
+* avg\_email\_mb \= 0.1  
+* CU\_avg \= 32  
+* neon\_cu\_price \= 0.222  
+* db\_storage\_gb \= 400  
+* commands\_per\_email\_job \= 15  
+* render\_monthly \= 7200  
+* vercel\_monthly \= 200  
+* goldrush\_monthly \= 250  
+* misc\_monthly \= 500
+
+Formulas:
+
+* C\_email \= E×0.00025 \+ (E×avg\_email\_mb)×0.00012  
+* C\_db \= (CU\_avg×730×neon\_cu\_price) \+ (db\_storage\_gb×0.35)  
+* C\_redis \= (E×commands\_per\_email\_job/100000)×0.20  
+* C\_total \= C\_email \+ C\_db \+ C\_redis \+ render\_monthly \+ vercel\_monthly \+ goldrush\_monthly \+ misc\_monthly
+
+---
+
+acs\_email\_pricing
+
+[https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/concepts/email-pricing.md](https://github.com/MicrosoftDocs/azure-docs/blob/main/articles/communication-services/concepts/email-pricing.md)
+
+neon\_pricing
+
+[https://neon.com/pricing](https://neon.com/pricing)
+
+upstash\_pricing
+
+[https://upstash.com/docs/redis/overall/pricing](https://upstash.com/docs/redis/overall/pricing)
+
+render\_pricing
+
+[https://render.com/pricing](https://render.com/pricing)
+
+vercel\_pricing
+
+[https://vercel.com/pricing](https://vercel.com/pricing)
+
+goldrush\_overview
+
+[https://goldrush.dev/docs/skills/goldrush-foundational-api/references/overview](https://goldrush.dev/docs/skills/goldrush-foundational-api/references/overview)
+
+# Product Definition
+
+**ONCHAINSUITE**
+
+Product Definition Document
+
+*The Communication Infrastructure Layer for Web3*
+
+# **1\. Executive Summary**
+
+**OnchainSuite is a retention automation platform purpose-built for Web3.**
+
+It is the first integrated communication infrastructure layer that natively connects on-chain user identity, behavioral analytics, and personalized messaging into a single automated workflow. OnchainSuite enables Web3 brands to communicate directly with users based on their real-time blockchain behavior.
+
+When a user deposits liquidity, mints an NFT, unstakes tokens, or performs any blockchain transaction, OnchainSuite automatically detects that behavior, resolves the anonymous wallet address to a verified identity, and triggers hyper-targeted email communication, all in real time, all privacy-preserving
+
+| Why It Matters: *In Web3, everyone is fighting for attention, and the cost of churn is existential. If a brand’s acquisition cost is rising while active wallets (not total wallets) are decreasing, they don’t need louder ads; they need to retain the users they already have.* |
+| ----- |
+
+# **2\. The Problem We Solve**
+
+**Web3 has a retention crisis.** Brands invest millions in user acquisition only to see a huge % of users churn within 180 days. In some DeFi verticals, churn exceeds 50% after 30 days.
+
+The root cause is not a lack of product-market fit. It is a critical infrastructure gap: **marketing tools are completely blind to on-chain behavior.**
+
+In Web2, when a user buys a product, abandons a cart, or browses a page, brands can immediately reach out with targeted communication and build relationships over time. In Web3, when a user trades $50,000 on a protocol for the first time, the brand cannot speak to them directly. They cannot thank them. They cannot build a relationship. The user simply disappears into the void.
+
+Today, Web3 brands are forced into a “patchwork stack”, stitching together Mailchimp for email, Privy or Dynamic for auth, Dune for analytics, and manual CSV exports in between. This results in fragmented workflows, zero automation, and generic blanket messaging on social media that fails to retain anyone.
+
+### **The Retention Crisis in Numbers**
+
+| Metric | Reality |
+| :---- | :---- |
+| DeFi user churn (180 days) | **Up to 60%** |
+| Worst-case churn (30 days) | **Exceeds 60% in some verticals** |
+| Ability to email users after an on-chain action | **Zero (with existing tools)** |
+| Global Web3 market (2025) | USD $4.62 billion |
+| Web3 Martech market CAGR | 26.5% (to $12.88B by 2032\) |
+
+# **3\. What is OnchainSuite**
+
+OnchainSuite is the advanced communication layer built natively for Web3 product ecosystems. It creates a seamless bridge between on-chain user behavior and off-chain communication channels, enabling Web3 brands to detect, understand, and respond to user actions on the blockchain through personalized, automated messaging.
+
+The platform operates as a single, unified product with three integrated capabilities working invisibly under the hood.
+
+## **3.1 Core Capabilities**
+
+### **Web3 Customer Data Rail (Identity Resolution)**
+
+*Powered by the Datum Labs proprietary data resolution engine.*
+
+Links anonymous wallet addresses to verified email identities using zero-knowledge privacy-preserving methods. Normalizes user profiles across multiple blockchains and makes consented data usable without compromising security. Supports multi-factor authentication, X (formerly Twitter) verification, Discord verification, and role-based access control. This is the trusted identity foundation that enables everything else on the platform.
+
+### **Behavioral Intelligence Rail (Data & Analytics)**
+
+*Powered by GoldRush and Datum Labs Onch3n engine.*
+
+Ingests raw on-chain activity across Ethereum, Solana, Base, Polygon, and more. Transforms blockchain complexity into marketer-friendly events through a proprietary **Protocol Normalization System** that standardizes actions across protocols, so a “liquidity deposit” looks the same whether it happens on Uniswap, Curve, or Aerodrome on Ethereum, BNB, Base, or Solana. 
+
+The PNS also surfaces AI-driven signals, including churn risk scores, high-value cohort identification, and reactivation potential.
+
+### **Marketing Automation Rail (Activation Engine)**
+
+Executes hyper-targeted email campaigns triggered by real-time blockchain events. Provides a visual workflow builder for multi-step automation sequences, A/B testing, template management, and campaign analytics. Brands can send precise communication to users based on any behavior on-chain: mints, swaps, unstakes, deposits, withdrawals, governance votes, all automatically, all personalized.
+
+## 
+
+## **3.2 Supported Blockchains**
+
+| Blockchain | Protocols Tracked | Data Points |
+| :---- | :---- | :---- |
+| **Ethereum** | Uniswap, Aave, Compound, ENS (and more) | Swaps, lending, governance |
+| **Solana** | Jupiter, Marinade, Magic Eden (and more) | DEX, staking, NFTs |
+| **Base** | Aerodrome, Moonwell (and more) | DeFi, gaming |
+| **Polygon** | QuickSwap, Aave (and more) | Layer 2 DeFi |
+
+# **4\. How It Works**
+
+OnchainSuite operates as a continuous, automated loop that replaces the fragmented patchwork stack entirely.
+
+### **The Automated Retention Loop**
+
+**Step 1: Identity Resolution:** A user connects their wallet and email details to a brand’s platform. With OnchainSuiteas the backend, it links the wallet address to a verified email identity using privacy-preserving methods. The user becomes known.
+
+**Step 2: Behavior Detection:** The user performs any on-chain action, trades, stakes, adds liquidity, or mints. OnchainSuite’s analytics engine captures this activity in real time across supported chains and normalizes it into actionable events.
+
+**Step 3: Intelligent Segmentation:** The behavioral data automatically segments users into cohorts: high-value depositors, churn-risk users, dormant wallets, new minters, and more. AI-driven scoring surfaces the most critical segments.
+
+**Step 4: Automated Activation:** Behavior-triggered campaigns fire automatically. A user who withdrew liquidity gets a personalized re-engagement email with an offer (if available). A first-time minter receives a welcome sequence. A high-value trader gets a loyalty reward notification.
+
+**Step 5: Measure & Improve:** Unified analytics track the full loop, from on-chain event to email open to re-engagement. Revenue attribution shows exactly which campaigns drive retention and lifetime value.
+
+| *The entire process is automated, privacy-preserving, and happens in real time. The marketer using ONS never needs to understand the underlying architecture. They simply think, “I want to email everyone who withdrew liquidity this week,” and execute it in one workflow.* |
+| :---- |
+
+# **5\. User Experience Philosophy**
+
+OnchainSuite’s design philosophy is rooted in a single principle: **marketers should never need to understand the product’s internal architecture to use it effectively.**
+
+Benchmarked against Klaviyo, a market leader in marketing automation known for hiding enormous backend complexity behind an intuitive interface, OnchainSuite has adopted a task-centric design that organizes the entire platform around what marketers actually do, not how the engineering is structured.
+
+## **5.1 Design Principles**
+
+| Principle | What It Means |
+| :---- | :---- |
+| **Task-Centric Design** | The interface is organized around marketing goals (send a campaign, build an automation, analyze performance), not internal systems. |
+| **Abstract Complexity** | The three internal engines (3ridge, Onch3n, R3tain) are invisible to the user. They work seamlessly in the background. |
+| **Progressive Disclosure** | Advanced features (SQL analytics, developer tools, API keys) are accessible but never clutter the primary interface. |
+| **Marketing-First Language** | No internal jargon. "Rails," "events," "routes" are replaced with "Automations," "Audience," "Campaigns." |
+
+## **5.2 Unified Navigation**
+
+The platform consolidates 26+ fragmented menu items from the original three-product architecture into 7 intuitive top-level categories:
+
+| Section | Purpose | What Lives Here |
+| :---- | :---- | :---- |
+| **Home** | Command Center | Dashboard KPIs, alerts, recent activity, quick actions, churn risk notifications |
+| **Campaigns** | One-off Messages | Email builder, templates, A/B testing, campaign analytics |
+| **Automations** | Triggered Flows | Visual workflow builder, on-chain event triggers, multi-step sequences, AI suggestions |
+| **Audience** | Contact Management | Unified contact profiles, segment builder, wallet-email synthesis, import/export |
+| **Intelligence** | Performance & Insights | Unified dashboards, revenue attribution, churn analysis, engagement scoring, SQL interface |
+| **Integrations** | Connections | Discord, wallet providers, developer tools (API, SDK, webhooks) |
+| **Settings** | Account & Security | Account management, billing, team permissions, security configurations |
+
+# **6\. Competitive Positioning**
+
+## **6.1 The Patchwork Problem**
+
+OnchainSuite’s primary competition is not a single product; it is the “patchwork stack” that Web3 brands are forced to assemble from disconnected Web2 tools. The typical Web3 brand today uses some combination of Mailchimp or SendGrid for email, Privy or Dynamic for wallet authentication, Dune or Flipside for analytics, and manual CSV exports to move data between them. This workflow is slow, error-prone, and incapable of real-time automation.
+
+## **6.2 Competitive Moat**
+
+* **Protocol Normalization Engine (Proprietary):** Standardizes blockchain events across all supported protocols into a unified schema. A “swap” on Uniswap and a “swap” on Jupiter are recognized as the same marketing-relevant action.
+
+* **Native Multi-Chain Data Pipeline:** Real-time ingestion from Ethereum, Solana, Base, and Polygon through a shared infrastructure, not third-party aggregators.
+
+* **Privacy-Preserving Identity Bridge:** Zero-knowledge architecture links wallets to emails without exposing user data on-chain.
+
+* **Integrated Analytics-to-Action Workflow:** No manual exports, no CSV stitching. Behavioral data flows directly into campaign triggers in a single automated loop.
+
+## **6.3 OnchainSuite vs. The Patchwork Stack**
+
+| Capability | Patchwork Stack | OnchainSuite |
+| :---- | :---- | :---- |
+| Identity resolution | Manual wallet-email mapping | Automatic ZK-privacy bridge |
+| On-chain analytics | Dune queries \+ CSV export | Real-time normalized events |
+| Email automation | Generic (no on-chain triggers) | Behavior-triggered campaigns |
+| Data flow | Manual CSV stitching | Unified real-time pipeline |
+| Time to campaign | Hours to days | Minutes |
+| Multi-chain support | Per-tool configuration | Native, protocol-normalized |
+
+# **7\. Target Market**
+
+## **7.1 Primary Market**
+
+Web3 brands are struggling with user retention and lack behavior-triggered communication tools. This includes DeFi protocols, blockchain gaming platforms, DAOs, NFT marketplaces, and any Web3 product ecosystem with active on-chain users.
+
+## **7.2 Primary Persona: The Web3 Growth Marketer**
+
+A sophisticated growth professional working in Web3 who understands marketing automation but is not a developer. They think in terms of campaigns, segments, and retention, not smart contracts, RPCs, or SQL queries. They want to execute ideas like “email everyone who bought our NFT” or “build a win-back flow for users at risk of churning” without needing to become a systems architect.
+
+## **7.3 Market Opportunity**
+
+| Market | Size & Growth |
+| :---- | :---- |
+| Global Web3 Market (2025) | USD $4.62B → $99.75B by 2034 (41.18% CAGR) |
+| Web3 Martech Market (2023) | USD $2.14B → $12.88B by 2032 (26.5% CAGR) |
+| OnchainSuite’s Target Segment | Retention automation is the highest-value segment within Web3 Martech |
+
+# **8\. Technical Foundation**
+
+OnchainSuite is built on a modern, scalable stack designed for real-time blockchain data processing and high-throughput email delivery.
+
+| Layer | Technology | Purpose |
+| :---- | :---- | :---- |
+| **Frontend** | React 18.x | Unified user interface with task-centric navigation |
+| **Backend** | Node.js 20.x LTS | API Gateway and service orchestration |
+| **Database** | PostgreSQL 15.x | Primary data storage and user profiles |
+| **Analytics** | BigQuery | Data warehouse for behavioral analytics |
+| **Cache** | Redis 7.x | Session management and data caching |
+| **Queue** | Bull Queue 4.x | Job processing for email delivery and event handling |
+| **Infrastructure** | Hetzner Bare Metal | Self-hosted production environment with horizontal auto-scaling |
+| **Email Delivery** | AWS SES v2 | High-throughput email delivery with DKIM/SPF authentication |
+| **Security** | Midnight \+ Lit Protocol | ZK-proof verification and decentralized key custody |
+
+## **8.1 Architecture Principles**
+
+* **Single API Gateway:** The frontend communicates exclusively with one unified API endpoint. Direct communication to individual backend services is strictly forbidden.
+
+* **Task-Oriented API Design:** Endpoints are designed around user actions (e.g., POST /automations) rather than internal architecture (e.g., POST /r3tain/flows).
+
+* **Real-Time Data Synchronization:** When a user connects their wallet, their identity becomes immediately trackable and targetable across all platform capabilities.
+
+* **Privacy-First:** Zero-knowledge architecture ensures user data protection. AES-256 encryption at rest, TLS 1.3 in transit, and ZK-proof based verification.
+
+# **9\. Mission, Vision & Values**
+
+## **9.1 Mission**
+
+*Transform Web3’s biggest problem, catastrophic churn and zero direct communication based on on-chain behavior, into the most powerful lever for sustainable growth.*
+
+## **9.2 Vision**
+
+*To become the essential communication infrastructure layer that enables every Web3 brand to build lasting relationships with their users through intelligent, behavior-driven engagement.*
+
+## **9.3 Core Values**
+
+* **Privacy-First:** Zero-knowledge architecture protects user data at every layer.
+
+* **Integration Excellence:** Seamless, developer-friendly tools that work as one unified system.
+
+* **Data-Driven:** Every decision backed by behavioral analytics and real-time on-chain intelligence.
+
+* **Web3 Native:** Built specifically for blockchain ecosystems, not adapted from Web2 tools.
+
+* **User-Centric:** Marketer-friendly interfaces with enterprise-grade power underneath.
+
+# **10\. Why It Matters**
+
+In Web3, everyone is fighting for attention, and the cost of churn is existential. If a brand’s acquisition cost is rising while active wallets are decreasing, they don’t need louder ads; they need to retain the users they already have.
+
+If you don’t speak when the user acts, a competitor will. OnchainSuite gives marketers the timing, context, and channel to win that moment, without needlessly having to airdrop or run incentive campaigns just to maintain visibility.
+
+OnchainSuite replaces the existing growth patchwork with one continuous loop: **Detect behavior → Segment → Message with precision → Measure and improve.**
+
+This isn’t just a product. It’s the missing infrastructure that Web3 needs to mature, the communication layer that finally makes every on-chain action a chance to keep the relationship alive.
+
+# Research Brief
+
+# **OnchainSuite Research Brief: Evidence Base for Investor Business Plan**
+
+## **TL;DR**
+
+* The Web3 marketing/retention infrastructure category is real but structurally smaller and more concentrated than OnchainSuite's internal deck implies; replace the broad "$4.62B → $99.75B Web3 TAM" framing with a tighter Web3-martech SAM (\~$2.71B in 2025 → \~$7.65B by 2030 at 23.1% CAGR per The Business Research Company) and a bottom-up SOM built off DefiLlama's 7,000+ tracked DeFi protocols, plus a few hundred funded blockchain games, NFT projects, and budgeted DAOs.
+
+* The competitive set is more crowded and far better-capitalized than the internal positioning admits: Absolute Labs ($8M seed; LVMH/Samsung Next/MoonPay), Cookie3 (\~$8M total; Animoca/Spartan), Addressable.io ($13.5M; Viola/Fabric/BITKRAFT), Notifi ($12.5M; Hashed/Race), XMTP/Ephemera ($20M Series B at $300M post / $750M network valuation; a16z crypto/USV/Lightspeed), Push ($10.8M; Jump/Binance Labs), and the strategic exit signal Coinbase → Spindl (Jan 31, 2025). Most importantly, the most direct prior analogue, Holder.xyz, the High Alpha–incubated Web3 CRM, is "permanently closed" per Crunchbase; this both validates timing risk and opens whitespace.
+
+* The current $250K @ $2M pre-seed and $1.5M @ $8M planned seed are LIGHT vs. 2025 crypto-infra norms: per Carta's State of Pre-Seed 2025 in Review, median post-money SAFE caps for $250K–$1M pre-seed rounds were \~$10M (crypto specifically sits at the top of the distribution); per Crunchbase News (Jan 2026), former Lightspeed/now-Premise partner Mercedes Bent stated "Seed today is basically what Series A was seven years ago… A seed round is generally from $3 million to $8 million… And seed valuations are between $20 million and $50 million post-money." Near-term GTM should be design-partner-led founder selling \+ ecosystem-grant credibility (Base Builder Grants 1–5 ETH; Solana Foundation \~$40K average per Solana Foundation CPO Vibhu Norby; Optimism RetroPGF), not paid acquisition, with EDPB Guidelines 02/2025 wallet-as-personal-data risk treated as a first-class diligence question.
+
+## **Key Findings**
+
+### **1\. Market sizing & validation**
+
+| Source | Web3 marketing/MarTech market | CAGR | Notes |
+| ----- | ----- | ----- | ----- |
+| The Business Research Company (2025) | $2.71B (2025) → $7.65B (2030) | 23.1% | Most conservative, often-cited; narrowly defined |
+| Market Research Future | $1.97B (2024) → $26.15B (2035) | 26.52% | Long-horizon; includes loyalty programs |
+| Market Research Future (US-only) | $560M (2025) → $1.70B (2035) | 11.74% | Geographic decomposition |
+| Mordor Intelligence (Web3, broad) | $3.47B (2025) → $29.97B (2031) | 43.21% | Includes payments/exchanges; too broad for SAM |
+| Precedence Research (Web3, broad) | $4.62B (2025) → $99.75B (2034) | 41.18% | Source of internal deck figure; too broad for SAM |
+| Fortune Business Insights (Web3, broad) | $4.63B (2025) → $176.32B (2034) | 49.84% | Outlier on the high end |
+
+**Verdict on internal figures**: The "$2.14B → $12.88B at 26.5% CAGR" Web3 martech line is directionally defensible; the underlying $1.97B/2024 → $26.15B/2035 MRF report is the closest match. The broader "$4.62B → $99.75B Web3 TAM" line should be retired in the investor narrative; it's accurate but mostly captures chains, wallets, and exchanges, not OnchainSuite's buyers. **Flag**: forecasters disagree by 4–6× on long-horizon size; cite a range, not a point estimate.
+
+**Churn data substantiating the wedge** (the strongest part of the OnchainSuite story):
+
+* DeFi retention by category (CoinCryptoRank, Sept 2025): Lending 25–35% M3, DEXs 15–25%, Derivatives 20–30%, Yield aggregators 10–20%; "Protocols with 30%+ Month-3 retention rates demonstrate 5x higher lifetime value compared to those below 15%."  
+* Blockchain-Ads benchmarks: D30 retention \~42% globally; 65% in Africa.  
+* Plotline/Adjust: average D30 retention across all mobile apps is just 6%; Fintech is 30.3%.  
+* Messari/RZLT: "well-structured incentives lifting participant hold times by 30-70% during program cycles."
+
+**The internal "60% churn within 180 days, exceeding 60% in 30 days in some verticals" figure is supported by these sources and should be kept.**
+
+### **2\. Competitive landscape**
+
+| Company | Category | Total funding | Lead investors | Status / Notable customers |
+| ----- | ----- | ----- | ----- | ----- |
+| **Holder.xyz** | Web3 CRM (direct analog) | \~$10M (High Alpha incubation) | High Alpha | **Permanently closed** (Crunchbase). Critical cautionary signal. |
+| **Absolute Labs (WRM)** | Web3 CRM / Wallet Relationship Mgmt | $8M seed (Apr 2023\) | Aglaé, Samsung Next, MoonPay, Animoca's Sparkle, Near Foundation, W3i | Live; LVMH, MoonPay, The Sandbox, Mocaverse, J.P. Morgan, Instagram, TIME, Ledger |
+| **Cookie3** | On-chain analytics \+ KOL intelligence ("MarketingFi") | \~$8M (incl. $5.5M token raise Jun 2024\) | Spartan, Animoca, Mapleblock, 38+ investors | Live; $COOKIE token; analytics tilt |
+| **Addressable.io** | Wallet retargeting \+ attribution | $13.5M seed (initial $7.5M Jan 2023 \+ $6M Oct 2023\) | Viola, Fabric, BITKRAFT, North Island, Karatage | Live: Coinbase, Polygon, eToro, Polkadot, Algorand; 23M wallet-to-social matches |
+| **Spindl** | On-chain ads \+ attribution | $7M Series A (Oct 2022\) | Heracles Capital \+ 10 others | **Acquired by Coinbase Jan 31, 2025**; operates under Base |
+| **Notifi** | Cross-chain notifications SDK | $12.5M ($10M seed Nov 2022\) | Hashed, Race Capital, Wintermute, HRT, Superscrypt | Live across Solana/NEAR/Ethereum/Polygon/Avalanche/Aptos/Sui; LP Finance, Hedge, Hyperspace, Solana Realms |
+| **Push (formerly EPNS) → Push Chain** | Notifications protocol → L1 chain | $10.8M | Jump Crypto, YZi Labs (Binance Labs), True Ventures | Pivoted to its own L1 in 2025 (testnet mid-2025); FDV \~$131M at peak |
+| **XMTP / Ephemera** | Decentralised messaging protocol | $40M total ($20M Series A 2021 \+ $20M Series B Jul 2025; $300M post / $750M network valuation) | a16z crypto, USV (Fred Wilson joined board), Lightspeed Faction, Coinbase, Sound Ventures | 2M+ identities, 60+ apps; integrated into Coinbase's Base app |
+| **Dialect** | Smart messaging on Solana | Multi-seed (13 investors) | Multicoin, Coinbase Ventures, Jump | Solana-native; wallet-to-wallet \+ notifications |
+| **Galxe** | Quest/credentials platform | Token-funded (GAL) | Multicoin, Dragonfly, HashKey | 26M+ users; "Starboard" growth analytics; "Earndrop" airdrop tool |
+| **Layer3** | Quest platform | Series A \~2023 (\~$15M est.) | ParaFi, Lightspeed Faction | 1M+ active users, 25 blockchains; minimum quest \~$4,500 |
+| **Intract** | Quest platform (enterprise-tilt) | Seed | Multiple | Sybil-resistance focus, KYC templates |
+| **PeakAI** | KOL marketing analytics | $2M seed (Mar 2026\) | Cogitent, ViaBTC Capital, MARBLEX, PAKA | 100K+ creators; influencer attribution |
+
+**Differentiation strategy for OnchainSuite** (sharper than the current deck):
+
+* **Vs. Absolute Labs**: Absolute Labs is enterprise-luxury-tilted (LVMH, J.P. Morgan); they target Web2 brands moving into Web3. OnchainSuite should explicitly counter-position as **crypto-native first**, with DeFi/gaming/DAO-native primitives and a much faster time-to-value (10 minutes per the v2 onboarding spec) than Absolute Labs' enterprise sales cycle.
+
+* **Vs. Cookie3**: Cookie3 is analytics \+ KOL; OnchainSuite is **automation \+ retention**, the action layer. Position Cookie3 as a potential integration, not a competitor.
+
+* **Vs. Notifi/Push/Dialect/XMTP**: These are infrastructure protocols; OnchainSuite should position as the **application/orchestration layer that sits on top of them** (just as Klaviyo sits on top of SendGrid/SES). The XMTP integration roadmap is essential.
+
+* **Vs. Holder.xyz** (the elephant in the room): The honest answer is that Holder launched too early (June 2022, just before NFT collapse), was NFT-heavy in positioning, and lacked OnchainSuite's behavioural-trigger automation thesis. Investors will press on this; have a 90-second answer ready.
+
+* **Vs. Quest platforms (Galxe/Layer3/Intract)**: Different motion (acquisition campaigns vs. retention workflows). These are partners, not competitors.
+
+### **3\. Go-to-market evidence**
+
+**Founder-led sales is the only credible motion at this ACV**: Per DesignRevision's B2B SaaS GTM playbook (2026), "Product-led for under $5K, hybrid for $5K-$50K, sales-led for $50K+." OnchainSuite's $3K–$5K CLV target sits in **hybrid/founder-led** territory. Kay Iversen's "Modern GTM playbook for B2B SaaS": "After the initial community is very happy with the MVP, use founder selling to win 10–20 new paying customers outside the community. This will prove your message-fit and confirm your understanding of the required manual onboarding and purchasing process." This is exactly the 1-to-10 motion OnchainSuite is in.
+
+**Design-partner economics (from SaaStr's incentive framework)**:
+
+* "$10,000 in usage credits during the design phase, and after launch, you'll receive a 20% discount on all usage for the first year"
+
+* 0.5% advisory equity OR small revenue share for high-strategic partners
+
+* "Exclusive access to advanced analytics features for 12 months before they're available to other customers"
+
+* These should be codified in OnchainSuite's design-partner agreement.
+
+**Ecosystem grant programs, specific dollar figures and credibility precedents**:
+
+* **Base Builder Grants** (Base official docs): "Fast, retroactive grants ranging from 1-5 ETH. Perfect for shipped projects ready to scale." Monthly cohorts since March 2024; 20+ cohorts to date. Base Batches: $10K grant to top 15 startup-track teams \+ $50K Base Ecosystem Fund investment to ≥3 winners. Base Ecosystem Fund estimated $35–60M deployed (CCN, third-party estimate; Coinbase has not disclosed officially).
+
+* **Optimism RetroPGF**: Round 4 \= 10M OP (\~$25M at announcement, fluctuates with OP price); Round 5 \= 8M OP to 79 projects (average \~101K OP/project); Round 6 \= 2.4M OP to 88 governance-tooling projects. Lifetime allocation 850M OP (20% of total supply) per ETH Daily.
+
+* **Solana Foundation**: Average grant size \~$40,000 for public-good/open-source efforts, per Solana Foundation CPO Vibhu Norby (Coinpaper, 2025). Convertible grants available for commercial products. **Superteam microgrants up to $10K** target Africa, India, Southeast Asia, Eastern Europe. Up to $1M dedicated to interoperable financial systems grants. Colosseum hackathon track offers pre-seed funding \+ mentorship.  
+*   
+  **Polkadot Web3 Foundation Grants** and **Polkadot Treasury** also exist; lower priority unless OnchainSuite expands to Polkadot.
+
+**Credibility precedents** (templates for how to PR a grant):
+
+* **ChainPatrol** (Web3 security infra): Awarded 49,000 OP via Optimism RetroPGF 3\. Public framing: "This Optimism RetroPGF 3 grant is an endorsement of ChainPatrol's innovative product, and of the impact that ChainPatrol has already had on the Optimism Collective and in the Web3 and Superchain ecosystem." This is the cleanest direct match for OnchainSuite's playbook.
+
+* **Agora** (governance dev tools): "RetroPGF gave our team the ability to take ambitious bets on building governance software for the long term, without the need to go down the traditional fundraising path. This provides an economic model for our work that is strongly aligned with our users, who are also our stakeholders."
+
+* **Talent Protocol**: "With a strategic investment from the Base Ecosystem Fund, led by Coinbase Ventures, and with $TALENT launching on Base, we're one step closer to bringing more builders onchain."
+
+* **Modern Treasury** was selected as a Solana Developer Platform payments infrastructure partner in March 2026, demonstrating how an ecosystem-program designation functions as enterprise credibility and distribution.
+
+### **4\. Pricing benchmarks**
+
+| Vendor | Pricing model | Entry price | Scale price | Notes |
+| ----- | ----- | ----- | ----- | ----- |
+| **Klaviyo** (UX benchmark) | Active profiles \+ SMS credits | $20/mo @ 500 profiles | \~$150 @ 10K, \~$375 @ 20K, \~$720 @ 50K (email-only) | **Switched to active-profile model Feb 2025**, raising costs \~25% for many accounts. The "success penalty" is the \#1 customer complaint. |
+| **Customer.io** | Usage-based; events \+ people | Mid-tier | Negotiable enterprise | Product-led B2B focus |
+| **Braze** | Enterprise MAU \+ contract | None | $60K+/year floor | Enterprise only |
+| **Iterable** | Mid-market MAU | Mid-tier | Negotiable | Between Customer.io and Braze |
+| **MoEngage** | **Monthly Tracked Users (MTUs)** only count actively engaged users | Mid-tier | 30–40% cheaper than Klaviyo at scale | **The model most appropriate for Web3** only counts active wallets, not lifetime |
+| **Layer3** | Per-quest | \~$4,500 minimum / 3–5 days | Curated partnership only | Acquisition motion |
+| **Notifi / Push** | Developer SDK, usage-based | Not public | Custom | Pure infrastructure |
+
+**Recommended OnchainSuite model (defensible, Web3-native)**: A dual-axis structure: **tracked active wallets (MAU equivalent) \+ monthly send credits across channels**, with channel-specific overage pricing (email cheap, SMS/push more expensive, in-app push cheapest). Suggested tiers:
+
+* **Starter**: $299/mo, 5,000 tracked wallets, 50K sends/mo, 1 chain, email \+ in-app push  
+* **Growth**: $999/mo, 25,000 tracked wallets, 250K sends, 3 chains, all channels except SMS  
+* **Scale**: from $2,999/mo, 100K+ wallets, all chains, SMS, white-glove  
+* **Enterprise**: Custom, including on-prem PNS, dedicated SLAs
+
+This puts ACV at $3.6K–$36K, fits the founder-led/hybrid sales motion (\<$50K ACV per DesignRevision benchmark) and aligns with the internal $3K → $5K CLV target.
+
+### **5\. Early-user / design-partner playbook**
+
+The reechee.io 2025 framework: "A design partner is an early-stage customer who co-builds your product with you in exchange for early access, preferential pricing, and influence over the roadmap. Three to five of them, picked well, can compress your time to product-market fit by months. Picked badly, they turn into expensive custom development for a product nobody else wants."
+
+**Sourcing channels (in order of effectiveness for crypto)**:
+
+1. **Founder/team network**: ex-colleagues, prior trust ("the trust shortens every step that comes after")
+
+2. **Crypto-native communities**: Farcaster channels, Telegram OG groups, ETHDenver/Solana Breakpoint/Token2049 hallway conversations, Base/Solana ecosystem chats
+
+3. **Public competitor frustration signals**: G2/Capterra complaints about Klaviyo for crypto, founders publicly venting about Mailchimp deliverability, Twitter threads about Dune query maintenance  
+4. **Chain ecosystem teams**: Direct intros from Base BD, Solana Foundation, Optimism Collective
+
+**Conversion-from-design-partner benchmark**: Industry rule of thumb is 60–80% of design partners convert to paying customers IF the agreement explicitly defines transition pricing and timeline. Without this contract clause, conversion drops below 30% (SaaStr).
+
+### **6\. Fundraising climate 2025–2026**
+
+**Pre-seed 2025 benchmarks** (Carta Q1 2025, State of Pre-Seed 2025 in Review):
+
+* 90% of pre-seed rounds on SAFEs in Q1 2025 (record high); convertible notes 10%
+
+* Median valuation caps for post-money SAFEs: **$10M for rounds $250K–$1M; $15M for $1–2.5M rounds; \~$30M for $2.5M+ rounds**
+
+* Crypto/Web3 startups consistently among the highest valuation caps in SAFE rounds, along with biotech and hardware
+
+* Quarterly volumes stable at $800M–$1.1B in pre-seed activity
+
+**Seed 2025 benchmarks** (Crunchbase News Jan 2026, citing Mercedes Bent of Premise; Carta State of Private Markets Q4 2025):
+
+* Per Crunchbase News: "Seed today is basically what Series A was seven years ago… A seed round is generally from $3 million to $8 million, sometimes up to $10 million. And seed valuations are between $20 million and $50 million post-money."
+
+* Carta Q4 2025: median post-money valuation on primary rounds (all stages) "rose to a new all-time high of $24 million"
+
+* Carta Q1 2025: median seed pre-money was $16M, up 18% YoY
+
+* More than half of seed dollars in 2025 went into rounds of $10M+
+
+* Total US crypto/blockchain VC: $3.8B in Q1 2025 (Crunchbase News, "Crypto And Blockchain Funding Sees Big Boost In Q1 Thanks To Binance"), of which $1.8B excluding the $2B Binance one-off. Annualised, well above 2023 lows.
+
+**Active crypto pre-seed/seed funds relevant to OnchainSuite** (with check sizes where disclosed):
+
+* **1kx** (Netherlands): $250K–$2M, pre-seed to Series A, token-network thesis  
+* **Shima Capital** (Irvine, CA): $250K–$2M, 360+ investments, infra/gaming/AI×crypto  
+* **Archetype** (Ash Egan): $100M fund 2025, protocol-led  
+* **Variant Fund**: consumer/ownership thesis  
+* **Multicoin Capital**: thesis-driven, attention economy 2025 focus  
+* **Collab+Currency**: creator/social crypto, $100K–$1M checks  
+* **Race Capital**: precedent, co-led Notifi's seed  
+* **Hashed** (Korea/SF): co-led Notifi's seed  
+* **Robot Ventures** (Tushar Jain-adjacent ecosystem): infra-friendly  
+* **Electric Capital**: developer ecosystem focus  
+* **Coinbase Ventures \+ Base Ecosystem Fund**: Base alignment  
+* **Sparkle Ventures (Animoca Brands)**: in Absolute Labs, Cookie3  
+* **MoonPay Ventures**: in Absolute Labs
+
+**Critical benchmarking of OnchainSuite's plan**:
+
+* Current **$250K @ $2M cap** is well below the Carta-reported crypto median ($10M cap for $250K–$1M rounds). This is **friends-and-family/angel pricing, not market pre-seed pricing** , fine if positioned as such, but should not be the company's "official pre-seed" in the deck.
+
+* Planned **$1.5M @ $8M cap seed** is materially below the Crunchbase/Bent 2025 seed benchmark ($3–8M raise on $20–50M post-money) AND below Carta's $16M median pre-money / $24M median post-money. With strong early traction (2+ paid customers \+ 1 ecosystem grant), OnchainSuite should target **$2.5–4M @ $15–25M post-money** at the next round.
+
+* **Recommendation**: Reframe the current $250K as a pre-pre-seed angel round and target a **$1–1.5M institutional pre-seed at $8–12M cap** as soon as the Moonwell case study lands. Then aim for $3–4M @ $20M+ at seed with \~$200–400K ARR.
+
+### **7\. Risks & diligence questions investors will ask**
+
+| Risk | Severity | Mitigation |
+| ----- | ----- | ----- |
+| **Wallet-as-personal-data under GDPR** | HIGH | EDPB Guidelines 02/2025 (adopted April 2025; public consultation closed 9 June 2025\) explicitly state that blockchain identifiers including "public key, and blockchain addresses… could be used to indirectly identify a natural person when used with other, additional identifiers." Paragraph 25 includes transaction metadata. EDPB rule: "As a general rule, storing personal data in a blockchain should be avoided if this conflicts with data protection principles," and "technical impossibility, such as the inability to delete data stored immutably on-chain, cannot be used to justify GDPR non-compliance." CNIL (France) since 2018: a data subject's right to erasure is "technically impossible to grant when data is registered on a blockchain." Penalty exposure: €20M or 4% of global turnover. **Mitigations**: keep email linking strictly opt-in with explicit consent; store linkage off-chain (Postgres, deletable); document a DSAR/erasure workflow; consider EU establishment \+ DPO; document ZK-based 3ridge approach as a privacy-by-design control. |
+| **Single design-partner concentration** | HIGH | Holder.xyz's death (the most direct analog) makes this acute. Lock in 3+ additional design partners in next 90 days; create written case study from Moonwell. |
+| **Platform/dependency risk** | MEDIUM | Reliance on Alchemy/Neynar/Dune/etc. and on chain RPCs. Build at least one redundant data source per chain; consider running own RPC nodes for the top 2 chains. |
+| **Email deliverability for crypto domains** | MEDIUM | Crypto-related email is heavily filtered. SES warming, dedicated IPs, SPF/DKIM/DMARC discipline; consider deliverability-as-feature for protocols. |
+| **Why now / market timing** | MEDIUM | Holder.xyz closing \+ Spindl→Coinbase \+ XMTP $20M Series B \+ Push pivoting to its own chain \= category in flux. Sharper "why now": (1) DeFi UX has matured to where retention is a budget line; (2) ZK \+ wallet identity unlocks models Holder couldn't build in 2022; (3) Coinbase/Base absorbed ad-tech, leaving retention/CRM as the unowned layer. |
+| **Defensibility/moat** | MEDIUM | Protocol Normalisation System \+ the 90-day cross-protocol behaviour index is the strongest claim. Quantify integration-time savings vs. Dune queries with hard numbers in the deck. |
+| **Token risk / regulatory ambiguity** | LOW-MEDIUM | As SaaS infra, not a protocol, OnchainSuite is on the safer side. If any "partner revenue share" involves tokens, restructure or carve out. |
+| **Holder.xyz "Why won't you fail the same way?"** | HIGH (narrative) | Must have a 60-second answer. Suggested: "Holder launched in June 2022 as the NFT market collapsed, was NFT-marketplace-tilted, and had no behavioural-trigger automation , they were essentially a wallet CRM without the actions layer. We're DeFi-first in a market with real recurring revenue per user, and our value prop is action-on-event automation, not just data storage." |
+| **Pricing power vs. crypto budget cycles** | MEDIUM | Crypto protocol marketing budgets are highly cyclical (bull → bear). Annual contracts with prepay incentive; SAFE-as-a-discount possible for strategic accounts. |
+
+### **8\. How well-supported are OnchainSuite's internal figures?**
+
+| Internal figure | Verdict | Notes |
+| ----- | ----- | ----- |
+| 60% DeFi churn within 180 days, \>60% in 30 days, some verticals | **Well-supported** | Matches CoinCryptoRank, RZLT/Messari, Blockchain-Ads benchmarks |
+| Web3 martech $2.14B → $12.88B at 26.5% CAGR | **Directionally supported** | Closest match: MRF $1.97B/2024 → $26.15B/2035 at 26.52%. TBRC has a more conservative $2.71B → $7.65B at 23.1% |
+| Web3 TAM $4.62B → $99.75B at 41% CAGR | **Technically supported, but misleading** | Precedence Research 2025, but this is the broad Web3 economy, not OnchainSuite's buyer market. Replace in the deck with martech-specific figures. |
+| CAC $500 → $300, payback 6 months | **Unbenchmarked** | No comparable Web3 CRM data exists publicly. Defensible only if backed by actual cohort data from Surgence/Moonwell sales. |
+| CLV $3,000 → $5,000, CLV: CAC 10:1 | **Aspirational** | The 10:1 target is in the top decile of B2B SaaS (typical is 3:1). A realistic target is 4–6:1 in years 1–2. |
+| \~200 customers / $60K MRR / $720K ARR by month 24 | **Achievable but optimistic** | At \~$300 ARPU/mo, this requires \~10 net-new customers/month in months 12–24. Bottom-up SOM suggests this is the optimistic end of realistic outcomes given competitive density and OnchainSuite's hybrid sales motion. |
+| $250K @ $2M pre-seed | **Below market for crypto-infra** | Carta median cap for $250K–$1M rounds is $10M; crypto rounds are higher still. Best framed as "angel pre-pre-seed." |
+| $1.5M @ $8M seed | **Below market** | Per Crunchbase News, quoting Mercedes Bent, "A seed round is generally from $3 million to $8 million… seed valuations are between $20 million and $50 million post-money." OnchainSuite should target $2.5–4M @ $15–25M post-money at next round. |
+
+## **Recommendations, Staged & Actionable**
+
+**Stage 0 (now → month 3): Lock the design-partner playbook**
+
+* Convert Surgence and Moonwell into **named reference customers** with quantified outcomes (e.g., "Moonwell increased 30-day depositor retention from X% to Y%"). The seed raise will stall without this.
+
+* Sign 3–5 additional design partners using the SaaStr template: $10K usage credits \+ 20% Year-1 discount \+ 12-month feature exclusivity \+ 0.5% advisory equity if strategic.
+
+* **Source design partners**: warm intros from Moonwell's investors (Coinbase Ventures, Polychain) \+ Solana Foundation BD \+ ETHDenver and Solana Breakpoint hallway conversations.
+
+* **Benchmark to change course**: If you cannot land 3 additional design partners in 90 days through warm intros alone, narrow ICP from "DeFi/Gaming/DAO/NFT" to **DeFi-only** (highest pain, biggest budgets, clearest metrics).
+
+**Stage 1 (month 3–9): Ecosystem-grant credibility flywheel**
+
+* **Base Builder Grants** (1–5 ETH): Apply with Moonwell-on-Base reference; PR the grant publicly using the ChainPatrol template.
+
+* **Solana Foundation** (\~$40K target per Vibhu Norby): Apply once Jupiter/Marinade integrations are live; pursue Superteam microgrant ($10K) first as a fast feedback loop.
+
+* **Optimism RetroPGF Round 7+**: Apply with Moonwell integration on Optimism Superchain.
+
+* **Coinbase Ventures' intro via Base Builder Grants relationship** is the highest-leverage chain partnership outcome.
+
+* **Benchmark to change course**: If 0 of 3 grant applications land in 6 months, fundamentally reexamine product positioning vs. ecosystem value.
+
+**Stage 2 (month 6–12): Founder-led sales to 10 paying customers**
+
+* Target the **top 50 DeFi protocols by TVL on Base/Solana/Polygon/Ethereum**. Use Moonwell case study \+ grant credibility as opening signal.
+
+* Lead with the **v2 \<10-minute first-mile onboarding**, the genuine UX differentiator vs. Absolute Labs' enterprise sales cycle.
+
+* Pricing launch with three tiers (Starter $299, Growth $999, Scale from $2,999). ACV range $3.6K–$36K fits founder-led motion (\<$50K).
+
+* **Conversion benchmark**: target 25–35% of qualified discovery calls → paid in first 90 days; if below 15%, the messaging or wedge is wrong.
+
+**Stage 3 (months 9–15): Raise the seed at credible terms**
+
+* Target **$2.5–4M seed @ $15–25M post-money** (consistent with Carta Q4 2025 / Crunchbase News 2025 seed benchmarks). Drop the $1.5M @ $8M plan; it materially underprices the company and signals weak founder negotiating leverage.
+
+* **Investor target list** (in priority order): 1kx, Shima Capital, Archetype, Variant, Race Capital (Notifi precedent), Hashed (Notifi precedent), Robot Ventures, Coinbase Ventures (Base alignment), Animoca's Sparkle Ventures (Absolute Labs precedent), Multicoin (if Solana traction).
+
+* **Angel signal**: Approach XMTP's Shane Mac, Notifi's leadership, Klaviyo alumni, and post-mortem-able Holder.xyz founders for advisor/angel positions to neutralise the "Holder failed, why won't you?" risk.
+
+**Stage 4 (month 12–24): Reach $720K ARR target**
+
+* The internal plan's 200 customers × $300 MRR \= $60K MRR / $720K ARR requires **\~10 net-new customers/month in months 12–24**. At realistic founder-led conversion (25–30%), this means \~30–40 qualified conversations/month, only achievable with: grant credibility (Stage 1\) \+ content engine \+ 2–3 chain-foundation partnerships.  
+* **Benchmark to change course**: If month-15 MRR \< $20K, switch from horizontal Web3 retention to **DeFi-only retention** and double the Scale tier price; the math then requires only \~80 customers at higher ARPU.
+
+## **Caveats**
+
+* **Forecaster disagreement on Web3 market size is severe** (CAGRs from 12% to 50%; 2031–2034 TAMs from $30B to $176B). Cite multiple sources in the plan; never anchor on a single point estimate.
+
+* **EDPB Guidelines 02/2025 are in DRAFT form** as of the most recent publicly available data; public consultation closed 9 June 2025\. The final text may shift; monitor the European Data Protection Board for the published final version before making compliance claims to investors.
+
+* **Base Ecosystem Fund total size is not officially disclosed by Coinbase**; the $35–60M figure is a third-party estimate (CCN, Crypto Fundraising).
+
+* **OP token grant USD values fluctuate** with OP price; the RetroPGF Round 4 "\~$25M" was at announcement.
+
+* **Holder.xyz's specific cause of death is not publicly documented**. The "permanently closed" Crunchbase tag is hard data, but the diagnosis (timing \+ NFT-tilt \+ missing automation layer) is inferred. Do not over-rely on this as a known-cause analysis in investor conversations without primary research.
+
+* **Spindl's acquisition price is undisclosed**, so no valuation comp is possible for the Coinbase exit.
+
+* **DappRadar's Q3 2025 figure of 4.66M daily active wallets** in Web3 gaming is confirmed verbatim in their report. However, DappRadar's co-founders announced on November 17, 2025, that they would "gradually cease their data tracking services for all blockchains and DApps." The DappRadar data citation is point-in-time accurate but no longer continuously updated; cross-reference with on-chain data going forward.
+
+* **The Crunchbase quote** in this report attributing the "seed \= old Series A" statement to Mercedes Bent (previously Lightspeed, now Premise) comes from Crunchbase News's January 2026 article "Seed Funding Is Bigger Than Ever, And Harder To Get." Confirmed verbatim.
+
+* **Internal CAC/CLV figures cannot be benchmarked externally**; no public Web3 CRM unit-economics data exists. Treat all CAC/CLV numbers as projections that must be validated with actual cohort data from Surgence/Moonwell before any seed-stage diligence.
+
+# Business Plan
+
+**ONCHAINSUITE**
+
+The Communication Infrastructure Layer for Web3
+
+**Business Plan**
+
+Investor Edition
+
+**A Datum Labs Product**
+
+May 2026
+
+*Confidential. Prepared for Prospective Investors*
+
+# **1\. Executive Summary**
+
+OnchainSuite is a retention-automation platform built natively for Web3. It is the communication infrastructure layer that connects on-chain user behaviour to multi-channel messaging, so that when a wallet deposits, swaps, mints, unstakes, or votes, the protocol can respond automatically, in the right channel, within seconds.
+
+The problem is concrete and well-documented. Web3 protocols spend heavily to acquire users and then lose most of them: lending-protocol cohorts retain only 25–35% by month three, DEXs 15–25%, and some DeFi verticals shed more than 60% of users within 30 days. **The root cause is not a bad product; it is a missing communication layer.** Marketing tools are blind to the blockchain, so when a user trades $50,000 for the first time or quietly withdraws their liquidity, the protocol has no way to respond. Today, they stitch together Mailchimp, Privy, Dune, and manual CSV exports, a patchwork that cannot automate or act in real time.
+
+OnchainSuite replaces that patchwork with one automated loop: **detect behaviour → resolve identity → segment → message → measure.** A proprietary Protocol Normalisation System standardises events across Ethereum, Solana, Base, and Polygon so that a “liquidity deposit” looks identical whether it happens on Uniswap, Aave, or Aerodrome. A wallet-first identity model treats the wallet as the canonical user record and other channels (in-app push, email, Telegram, Discord) as pluggable destinations. A library of pre-built “Plays” lets a non-technical growth marketer launch a sophisticated retention campaign in minutes rather than weeks.
+
+| The opportunity in one paragraph The Web3 marketing-technology market is estimated at roughly $2.7B in 2025 and is forecast to reach $7.7 to 26B by the early 2030s, depending on the definition, growing 23–27% annually. Retention automation is the highest-value, least-served segment within it. The most direct prior attempt at a Web3 CRM (Holder.xyz) shut down in 2022, and Coinbase’s 2025 acquisition of the on-chain ad-tech startup Spindl signals that the acquisition layer is being consolidated, leaving the retention and lifecycle layer as the largest unowned category in Web3 go-to-market. |
+| :---- |
+
+## **1.1 Traction and stage**
+
+OnchainSuite is incubated inside Datum Labs, a data and data-products company that all three founders own and run. It is at the pre-seed stage with a live email-activation product, a defined build roadmap, and two named design partners: Moonwell (a leading Base-native lending protocol) and Surgence, a go-to-market partner to 40-plus blockchain companies. Critically, OnchainSuite has a signed agreement to integrate into Surgence's full partner base at launch, giving the product a built-in distribution channel to those companies from day one. The immediate objective is to ship wallet-first identity, in-app push, and the Plays library, convert the design partners into reference customers with quantified retention outcomes, and win ecosystem-grant credibility from the major chains.
+
+## **1.2 The ask**
+
+The company is raising **$300,000 on a SAFE at a $5M valuation cap (approximately 6%)**, released in two tranches: $200K now, and $100K once the core product is live with Surgence and the first paying customers are onboarded. The reason this lean amount is sufficient is structural: OnchainSuite is incubated inside **Datum Labs**, a data and data-products company that the three founders own and run, which gives the team deep on-chain data expertise. The economics are inherently lean: a fixed infrastructure base of about $700/month that breaks even at roughly five customers, and a 60% gross margin on every customer. Capital goes to product and customers, not to overhead, and founder pay stays minimal until revenue covers it. A larger, higher-valuation round follows from a position of strength once retention outcomes are proven (Section 8).
+
+## **1.3 Why this team, why now**
+
+* **Why now:** DeFi UX has matured to the point where retention is a budget line, not an afterthought; zero-knowledge identity now makes wallet-to-channel linking possible in a privacy-preserving way that was not viable in 2022; and the consolidation of the acquisition layer (Coinbase/Spindl) leaves retention as the open frontier.
+
+* **Why this team:** Three founders who own and run Datum Labs together and are embedded in the exact ecosystem: the Product Lead heads Onchain Data & CRM at Surgence, the Head of Analytics is a data contributor and governance delegate at Moonwell, and the CTO is a senior engineer. The two design partners are organizations the founders already work inside.
+
+* **Why this wedge:** A genuinely differentiated sub-10-minute onboarding that delivers a valuable cohort insight before the user builds anything: the kind of immediate “aha” moment that compresses sales cycles in a founder-led motion.
+
+# **2\. Company and Product**
+
+## **2.1 What OnchainSuite is**
+
+OnchainSuite is a single, unified product that operates as a continuous, automated retention loop: detect on-chain behaviour, resolve identity, segment, message, and measure. To the user, a Web3 growth marketer who is not a developer, it presents seven task-centric sections: Home, Campaigns, Automations, Audience, Analytics, Integrations, and Settings. The interface is deliberately benchmarked against Klaviyo's design philosophy: enormous backend complexity hidden behind an intuitive surface.
+
+The platform rests on four product pillars.
+
+### **Wallet-first identity**
+
+The wallet is the canonical user record. Other identifiers (email, ENS, and chat handles) attach as optional channel handles and are resolved only when a channel needs them, using privacy-preserving, zero-knowledge methods. A wallet with zero linked channels is still a valid contact; it simply has fewer reachable channels. In-app push reaches 100% of connected wallets with no extra identifier, which is why it leads the channel set. This removes the single biggest source of onboarding friction: a protocol gets value from minute one, without first matching wallets to emails.
+
+### **Multi-channel activation**
+
+A single trigger and segment fan out to whichever channels are configured and reachable for each wallet. The automation builder uses channel-specific delivery nodes that share a common trigger and segment contract, so adding a channel never means rebuilding a campaign. In-app push, delivered via a lightweight JS SDK drops into its dApp and is the highest-leverage channel: it needs no DNS, no email warm-up, and no extra identity resolution. Email is live today; chat channels follow on the roadmap (Section 10).
+
+### **Protocol Plays library**
+
+A library of pre-built, fork-and-edit automations replaces the blank canvas as the default new-user experience. Plays such as First Deposit Welcome, Liquidity Migration Alert, Governance Vote Reminder, Whale Concierge, Churn Win-Back, Smart Contract Upgrade Notice, and LP Unbonding Reminder ship with pre-wired triggers, editable segments, copy templates with web3 dynamic blocks, and peer benchmarks drawn from anonymised cross-protocol data. New users see the Plays gallery first; the blank builder becomes the “start from scratch” option, not the front door. A non-technical marketer launches a sophisticated retention campaign in minutes rather than weeks.
+
+### **Sub-10-minute first-mile**
+
+Onboarding is the company's clearest competitive wedge. A protocol connects its contract addresses, the backend auto-indexes 90 days of normalised events in the background, and an auto-generated cohort report appears, for example: “142 dormant LPs from the last 30 days; median lifetime deposit $4.2k; 38 are also active on Aave.” The single call-to-action requires no email match. This delivers a quantified, valuable insight before the user has built anything: the immediate value that, in a founder-led sales motion, converts demos into deals.
+
+Underpinning all four pillars is a proprietary **Protocol Normalisation System** that standardises events across Ethereum, Solana, Base, and Polygon, so that a “liquidity deposit” looks identical whether it happens on Uniswap, Aave, or Aerodrome, and surfaces AI-driven signals such as churn-risk scores and high-value cohort identification.
+
+## **2.3 Defensibility**
+
+* **Protocol Normalisation System:** the proprietary cross-protocol, cross-chain event schema is the core moat. It is the difference between a marketer thinking “email everyone who removed liquidity this week” and executing it in one workflow, versus maintaining brittle Dune queries per protocol.
+
+* **Cross-protocol behavioural data:** anonymised, opt-in peer benchmarks compound with every protocol that joins, creating a data network effect competitors cannot replicate without scale.
+
+* **Privacy-by-design identity bridge:** the ZK-based linkage is both a feature and a regulatory hedge (see Section 9).
+
+# **3\. The Problem and the Market**
+
+## **3.1 The retention crisis is real and quantified**
+
+Web3's retention problem is not a thesis; it is measurable. Independent 2025 data confirms the severity the company has built around:
+
+* Lending-protocol cohorts retain only 25–35% of users by month three; DEXs 15–25%; derivatives 20–30%; yield aggregators 10–20%.
+
+* Protocols with 30%+ month-three retention show roughly 5× higher lifetime value than those below 15%, making retention the single highest-leverage growth variable.
+
+* Across mobile apps generally, average day-30 retention is about 6%; even fintech, a relatively sticky category, sits near 30%. Web3 is structurally worse because there is no communication channel after the on-chain action.
+
+*Sources: CoinCryptoRank DeFi Retention Metrics (Sept 2025); Blockchain-Ads User Acquisition Trends 2025–2026; Messari/RZLT incentive studies.*
+
+| The core insight In Web2, a cart abandonment triggers an email within minutes. In Web3, a user can withdraw $50,000 of liquidity, and the protocol cannot say a word, because the email tool has no idea what a wallet is. OnchainSuite closes that gap. When a wallet acts, the campaign fires. |
+| :---- |
+
+## **3.2 Market sizing**
+
+The company sizes its market conservatively and from the buyer in. We deliberately avoid anchoring on the headline “Web3 economy” figures (which run to $100B+ but mostly capture chains, wallets, and exchanges rather than marketing buyers) and instead frame the opportunity around Web3 marketing technology specifically.
+
+| Layer | Definition | Estimate |
+| :---- | :---- | :---- |
+| **TAM** | Global Web3 marketing-technology spend | \~$2.7B (2025), growing to \~$7.7–26B by early 2030s at 23–27% CAGR |
+| **SAM** | Retention/lifecycle automation for crypto-native protocols (DeFi, gaming, DAOs, NFT) on supported chains | \~$300–500M near-term, expanding with the category |
+| **SOM (3 yr)** | Funded protocols on Base, Solana, Polygon & Ethereum reachable via founder-led sales \+ ecosystem channels | Several hundred protocols; target 200 paying customers |
+
+*Sources: The Business Research Company (2025, $2.71B → $7.65B at 23.1% CAGR); Market Research Future ($1.97B/2024 → $26.15B/2035 at 26.5% CAGR); DefiLlama (7,000+ tracked DeFi protocols). Forecasters disagree by 4–6× on long-horizon size; a range is cited deliberately.*
+
+Bottom-up, the addressable customer base is concrete: **DefiLlama tracks more than 7,000 DeFi protocols**, to which add several hundred funded blockchain games, active NFT projects, and budgeted DAOs. Capturing 200 of these as paying customers, under 3% of the DeFi protocol universe alone, delivers the company’s 24-month plan.
+
+## **3.3 Target customer and persona**
+
+The primary market is crypto-native protocols struggling with retention: DeFi protocols, blockchain games, DAOs, and NFT marketplaces. The buyer is the Web3 Growth Marketer, a sophisticated growth professional who thinks in campaigns, segments, and retention, not smart contracts or SQL. They want to execute “build a win-back flow for users at risk of churning” without becoming a systems architect. For year one, the sharpest wedge is DeFi specifically: the highest pain, the largest budgets, and the clearest, most measurable outcomes.
+
+# **4\. Competitive Landscape**
+
+OnchainSuite competes on two fronts: against the patchwork stack that protocols assemble today, and against a small but increasingly well-capitalised set of Web3 marketing and messaging startups. Honesty about both is a strength in diligence, not a weakness.
+
+## **4.1 The primary competitor is the patchwork stack**
+
+Most Web3 brands today combine Mailchimp or SendGrid for email, Privy or Dynamic for auth, Dune or Flipside for analytics, and manual CSV exports to move data between them. This workflow is slow, error-prone, and incapable of real-time automation. OnchainSuite's wedge is replacing four disconnected tools and the manual glue between them with one automated loop.
+
+| Capability | Patchwork stack | OnchainSuite |
+| :---- | :---- | :---- |
+| Identity resolution | Manual wallet–email mapping | Automatic, ZK-privacy bridge |
+| On-chain analytics | Dune queries \+ CSV export | Real-time normalized events |
+| Activation | Generic, no on-chain triggers | Behaviour-triggered, multi-channel |
+| Data flow | Manual CSV stitching | Unified real-time pipeline |
+| Time to first campaign | Hours to days | Minutes |
+
+## **4.2 Direct and adjacent competitors**
+
+The category is more crowded and better-funded than a first glance suggests. The table below profiles the relevant players as of 2025–2026.
+
+| Company | Category | Funding | Signal |
+| :---- | :---- | :---- | :---- |
+| **Holder.xyz** | Web3 CRM (direct analog) | \~$10M (High Alpha) | Closed |
+| **Absolute Labs** | Wallet Relationship Mgmt | $8M seed | Live; enterprise/luxury tilt |
+| **Cookie3** | On-chain analytics \+ KOL | \~$8M | Live; analytics, token-funded |
+| **Addressable** | Wallet retargeting \+ attribution | $13.5M seed | Live; acquisition focus |
+| **Spindl** | On-chain ads \+ attribution | $7M Series A | Acquired by Coinbase (2025) |
+| **Notifi** | Cross-chain notifications SDK | $12.5M | Live; infrastructure layer |
+| **Push (→ Push Chain)** | Notifications protocol | $10.8M | Pivoted to its own L1 |
+| **XMTP / Ephemera** | Decentralized messaging | $40M ($20M Series B 2025\) | Protocol; $750M network val. |
+| **Galxe / Layer3 / Intract** | Quest & credentials | Token / Series A | Acquisition motion |
+
+*Sources: Crunchbase; Business Wire; CTech/Calcalist; The Block; Fortune; TechCrunch; High Alpha. Figures are disclosed totals where available.*
+
+## **4.3 How OnchainSuite differentiates**
+
+* **Versus Absolute Labs (the closest live competitor):** Absolute Labs is enterprise- and luxury-tilted (LVMH, J.P. Morgan, Instagram) and targets Web2 brands moving into Web3. OnchainSuite is crypto-native first, with DeFi/gaming/DAO primitives and a sub-10-minute time-to-value versus an enterprise sales cycle.
+
+* **Versus the notification protocols (Notifi, Push, XMTP, Dialect):** these are infrastructure. OnchainSuite is the application and orchestration layer that sits on top of them: the Klaviyo to their SendGrid. Integration, not competition; XMTP is on the channel roadmap.
+
+* **Versus the analytics and quest tools (Cookie3, Galxe, Layer3):** different job. Those drive acquisition and measurement; OnchainSuite drives retention and lifecycle. They are partners and data sources, not rivals.
+
+# **5\. Go-to-Market Strategy**
+
+OnchainSuite's go-to-market is staged and disciplined. At a $3,600 to $36,000-plus annual contract value, the right motion is founder-led and hybrid sales, not paid acquisition. Uniquely for a company at this stage, the plan opens with a built-in distribution channel: the signed Surgence integration.
+
+## **5.1 The Surgence channel (built-in distribution)**
+
+Surgence is a go-to-market partner to more than 40 blockchain companies, and OnchainSuite has a signed agreement to integrate into Surgence's partner base at launch. This is the company's single most valuable go-to-market asset. Customer acquisition is normally the hardest and most expensive part of an early B2B company; here, the first 40-plus qualified prospects arrive through an existing, trusted relationship rather than cold outreach. The go-to-market plan, therefore, starts warm: prove the product with the first Surgence partners, convert them to paying customers, and use those results to widen the funnel.
+
+## **5.2 Convert the design partners (now → month 3\)**
+
+The most important near-term task is turning Moonwell and Surgence into named reference customers with quantified outcomes, for example, “Moonwell increased 30-day depositor retention from X% to Y%.” Without this evidence, every later step is harder; with it, fundraising, grants, and sales all compound. Because the founders work inside both Surgence and Moonwell, these conversions start from a position most startups never have.
+
+The company will codify additional design-partner agreements with explicit transition terms. Industry best practice converts 60–80% of design partners to paid when the agreement defines transition pricing and timeline up front, and below 30% when it does not. The standard incentive structure:
+
+* Usage credits during the design phase, plus a discount on the first year of paid usage.
+
+* Twelve months of early access to advanced features before general availability.
+
+* A small advisory-equity or revenue-share arrangement for the most strategic partners.
+
+*Sources: SaaStr design-partner incentive framework; reechee.io design-partner guide (2025).*
+
+## **5.3 Ecosystem-grant credibility flywheel (month 3 → 9\)**
+
+Chain ecosystem grant programs are the highest-leverage early customer-acquisition and credibility channel in Web3. They provide non-dilutive capital, a public endorsement from a major chain, and a warm path to that chain's business-development team and venture arm.
+
+| Program | Typical award | Why it matters |
+| :---- | :---- | :---- |
+| Base Builder Grants | 1–5 ETH, retroactive, monthly cohorts | Path to Coinbase Ventures / Base Ecosystem Fund; Moonwell is Base-native |
+| Solana Foundation / Superteam | \~$40K avg; microgrants up to $10K | Credibility \+ distribution once Jupiter/Marinade integrations ship |
+| Optimism RetroPGF | Round-based; large pools (millions of OP) | Endorsement template proven by infra peers (ChainPatrol, Agora) |
+
+*Sources: Base Documentation (Get Funded); Solana Foundation (CPO Vibhu Norby, 2025); Optimism RetroPGF round data. OP-denominated awards fluctuate with the token price.*
+
+The company will PR each grant publicly using the framing infrastructure peers have used successfully, positioning the award as an endorsement of product impact on the ecosystem. ChainPatrol's RetroPGF announcement and Talent Protocol's Base Ecosystem Fund framing are the templates.
+
+## **5.4 Founder-led sales beyond the Surgence base (month 6 → 12\)**
+
+With a reference customer and grant credibility in hand, the founders sell directly to the top DeFi protocols by TVL on Base, Solana, Polygon, and Ethereum. The opening is the sub-10-minute first-mile: a live, quantified cohort insight about the prospect's own users, generated during the first call. This is the founder-selling phase that proves message-fit and confirms the manual onboarding and purchasing process before any rep is hired.
+
+* Lead with the Moonwell case study and the relevant chain grant as social proof.
+
+* Source prospects from the founders' network, crypto-native communities (Farcaster, Telegram OG groups, ETHDenver / Solana Breakpoint / Token2049 hallways), public competitor-frustration signals, and warm intros from chain BD teams.
+
+* Target 25–35% of qualified discovery calls converting to paid within 90 days; below 15% signals the wedge or message is wrong and triggers a narrowing to DeFi-only.
+
+*Source: founder-led GTM benchmarks (DesignRevision B2B SaaS GTM 2026; modern B2B SaaS GTM playbooks).*
+
+## **5.5 Scale (month 12 → 24\)**
+
+The 24-month plan requires roughly 10 net-new customers per month in the back half. At a realistic founder-led-plus-light-sales conversion rate, this means around 30 to 40 qualified conversations per month, achievable only with the compounding effect of grant credibility, a content engine aimed at Web3 growth marketers, and two to three chain-foundation partnerships feeding referrals. A built-in check: if month-15 MRR is below $20K, the company narrows from horizontal Web3 retention to DeFi-only and raises the top-tier price, which reduces the customer count required to hit the revenue target.
+
+# **6\. Business Model and Pricing**
+
+## **6.1 Revenue model**
+
+OnchainSuite is a SaaS business. Revenue is roughly 85% recurring subscriptions, 10% professional services (custom integrations and white-glove onboarding for larger protocols), and 5% partner revenue share (agency and white-label arrangements). The centre of gravity is recurring subscription revenue with expansion as protocols grow their reachable wallet base and add channels.
+
+## **6.2 Pricing model**
+
+Pricing is modular and usage-based: a protocol pays for what it actually uses, so the price scales smoothly from the smallest project to the largest, with no rigid tiers or hard caps. The bill is built from three components, each carrying the company's margin, plus a small base fee:
+
+* **Email subscribers:** the protocol's emailable audience. Each subscriber bundles a monthly send allowance (10 sends per subscriber), so sending capacity scales automatically with list size.
+
+* **Tracked wallets:** the number of on-chain wallets the protocol monitors. This is the platform's distinct value, independent of email, and is charged separately.
+
+* **Base fee:** a small flat fee covering a share of fixed platform overhead.
+
+Channels are email and in-app push first, with Telegram and Discord on the roadmap; the product does not offer SMS. Email sending runs on Azure at launch, migrating to AWS SES over time to lower per-email cost and add dedicated-IP deliverability control.
+
+Because pricing is continuous, the figures below are illustrative reference points at a 60% target margin rather than fixed packages:
+
+| Profile | Subscribers | Tracked wallets | Indicative price/mo |
+| :---- | :---- | :---- | :---- |
+| Small | 500 | 500 | \~$45 |
+| Growing | 1,000 | 2,000 | \~$140 |
+| Mid | 10,000 | 10,000 | \~$660 |
+| Large | 50,000 | 50,000 | \~$3,300 |
+
+*Illustrative, at a 60% margin. Price scales continuously with usage; larger protocols move to custom agreements. An internal calculator generates an exact quote from any subscriber and wallet count.*
+
+## **6.3 Cost structure**
+
+Costs fall into two buckets. Fixed platform infrastructure is a modest shared monthly base; variable costs scale per customer with usage. All infrastructure is funded from the company's own revenue and the raise, not by Datum Labs.
+
+| Fixed platform infra (monthly, shared) | Approx. |
+| :---- | :---- |
+| GoldRush (multichain data, 300k credits) | $250 |
+| Render (application \+ background workers) | $200 |
+| Neon Postgres (base compute \+ storage) | $150 |
+| Upstash Redis (queue / rate-limiting) | $30 |
+| Vercel (dashboard hosting) | $20 |
+| Monitoring, logging, domains | $50 |
+| **Total fixed infra** | **\~$700** |
+
+*Lean early-stage configuration; scales with volume. Sources: GoldRush, Render, Neon, Upstash, Vercel list pricing (2026).*
+
+Variable cost per customer is small: roughly $0.0001 per email send (AWS SES / Azure), a fraction of a cent per wallet for storage, and GoldRush data at about $0.025 per tracked wallet per month. **GoldRush is the largest variable cost driver**, which is why wallet tracking, not email, is the cost and value centre of the product. A single GoldRush Professional plan safely supports roughly 10,000 tracked wallets across all customers; the company provisions additional plans before that ceiling to prevent any service interruption.
+
+## **6.4 Margin and break-even**
+
+Every customer is priced to a **60% gross margin** by design, and the margin holds across the full size range because the model marks up actual cost. The fixed infrastructure base is small enough that the company **covers its entire fixed infra cost with roughly five paying customers**; every customer beyond that contributes margin straight to the bottom line. This is the structural advantage of a software product on a shared data pipeline: each additional protocol adds far more revenue than cost.
+
+| Unit economics, stated honestly Customer-acquisition cost, lifetime value, and payback are working projections to validate with real cohort data; no public Web3-CRM benchmarks exist. What is structural rather than assumed is the 60% gross margin on every customer and an infra break-even at about five customers. One number remains to be confirmed with engineering: the GoldRush credits consumed per wallet, which sets both the per-wallet cost and the wallet-per-plan ceiling. |
+| :---- |
+
+# **7\. Financial Plan**
+
+The projections below are management estimates that depend on the design-partner conversions and ecosystem traction described in Section 5\. They reflect the company's deliberate capital efficiency: a lean fixed-infrastructure base (\~$700/month) that breaks even at roughly five customers, a 60% gross margin on every customer, and founder compensation held minimal until revenue can comfortably cover it. All infrastructure is funded from revenue and the raise.
+
+## **7.1 Revenue trajectory (24 months)**
+
+| Milestone | Customers | MRR | ARR |
+| :---- | :---- | :---- | :---- |
+| Month 3 | \~8 | $2K | $24K |
+| Month 6 | \~25 | $7K | $84K |
+| Month 12 | \~65 | $18K | $216K |
+| Month 18 | \~120 | $35K | $420K |
+| Month 24 | \~200 | $60K | $720K |
+
+*Management base case. With a per-client margin of 60%-plus, the majority of incremental revenue converts to gross profit.*
+
+## **7.2 Operating expenses (indicative)**
+
+Operating costs are intentionally lean. The three co-founders draw a minimal salary (roughly $2K each per month) and only scale their own compensation once monthly revenue comfortably clears several times that draw, around the point where MRR passes \~$30K. Fixed platform infrastructure starts at roughly $700/month (GoldRush, Render, Neon, Upstash, Vercel, and monitoring; see Section 6.3) and is funded entirely from revenue and the raise, not by Datum Labs. Marketing spend stays low while the go-to-market is founder-led and grant-driven (Section 5).
+
+| Category | Month 1 | Month 12 | Month 24 |
+| :---- | :---- | :---- | :---- |
+| Personnel (founders) | $6K | $8K | $22K |
+| Infrastructure (platform \+ usage) | $1K | $3K | $7K |
+| Marketing | $1K | $4K | $9K |
+| Operations | $1K | $2K | $4K |
+| **Total** | **$9K** | **$17K** | **$42K** |
+
+*Indicative. Personnel rises only after revenue covers it; later increases reflect a full-time developer and a growth hire funded from revenue, not from the raise.*
+
+## **7.3 Use of funds ($300,000)**
+
+The raise is sized to ship the roadmap and reach the first \~20 paying customers, not to fund overhead. It is deployed across three priorities:
+
+* **Product (\~55%):** ship wallet-first identity, the in-app push SDK, and the Plays library, then the chat channels and peer benchmarks.
+
+* **Go-to-market (\~30%):** founder-led sales, design-partner success, content aimed at Web3 growth marketers, and presence at key ecosystem events.
+
+* **Compliance and reserve (\~15%):** privacy and legal review of the wallet-identity model (Section 9), and an operating buffer.
+
+Founder salaries are held minimal, and the fixed infrastructure base is small (\~$700/month, breaking even at about five customers), which is why $300K is sufficient to reach the milestone rather than merely extend the runway.
+
+# **8\. Funding Ask**
+
+OnchainSuite is raising $300,000 to ship its roadmap and reach its first paying customers through the Surgence channel. The amount is deliberately lean, and the reason it is sufficient is structural: the cost base is small, and the margins are high. Fixed platform infrastructure runs at roughly $700/month and breaks even at about five customers, while every customer is priced to a 60% gross margin. The founders also own and run Datum Labs, a data and data-products company, which gives the team unusual depth in on-chain data, the core of the product. The raise goes to product and customers, not overhead.
+
+## **8.1 The round**
+
+| Item | Detail |
+| :---- | :---- |
+| **Amount** | $300,000 total |
+| **Instrument** | SAFE (post-money), $5M valuation cap |
+| **Equity** | Approximately 6% on full conversion |
+| **Structure** | Two tranches: $200K now (\~4%), $100K on milestone (\~2%) |
+| **Milestone trigger** | Core product (wallet identity \+ in-app push \+ Plays) shipped and live with Surgence, plus the first 5–10 paying customers onboarded |
+
+*Indicative terms for discussion, not an offer. Tranche percentages are approximate and convert against the $5M cap as each tranche is funded.*
+
+## **8.2 How the tranches work**
+
+The investor commits the full $300K up front but releases it in two stages, which protects them while giving the company committed capital:
+
+* **Tranche 1, $200K now:** funds the build of wallet identity, in-app push, the Plays library, and the Surgence integration. Against the $5M cap, this converts toward roughly 4% (200K ÷ 5M).
+
+* **Tranche 2, $100K on milestone:** released only once the core product is live with Surgence and the first 5–10 paying customers are onboarded. This converts toward the remaining roughly 2% (100K ÷ 5M), bringing the total to about 6%.
+
+The milestone is chosen deliberately: it proves both that the team can ship and that the Surgence channel actually converts to paying customers, which is exactly what de-risks the second half of the investment.
+
+## **8.3 Why $5M is a fair, conservative price**
+
+Current market data puts pre-seed valuation caps for rounds of this size at a median around **$7.5–10M**, with crypto and Web3 startups consistently at the top of that distribution. A $5M cap, therefore, sits at the conservative end of the market, not the aggressive one. It is justified, not inflated, by three things a typical pre-launch startup lacks: a domain-expert founding team already embedded in the ecosystem (Surgence and Moonwell) and running their own data company (Datum Labs), a signed distribution agreement into 40-plus blockchain companies, and inherently lean economics (a \~$700/month fixed-infra base that breaks even at about five customers, with a 60% gross margin on every customer).
+
+*Benchmarks: Carta State of Pre-Seed 2025 (median caps \~$10M for $250K–$1M rounds; crypto/Web3 at the top of the range); corroborated by PitchBook-NVCA and independent 2026 pre-seed surveys.*
+
+## **8.4 What the money buys, and what comes next**
+
+The $300K takes OnchainSuite to a clean, fundable milestone: a shipped product, the Surgence integration live, two design partners converted into reference customers with proven retention lift, at least one chain ecosystem grant, and the first paying customers at a 60% gross margin. The economics are inherently lean, a fixed infrastructure base of about $700/month that breaks even at roughly five customers, so the capital goes to building and selling rather than to overhead. Once that proof is in place, the company expects to raise a larger round from a position of strength, at a higher valuation. That round is a choice made from progress, not a rescue from running out.
+
+## **8.5 Target investors**
+
+The most relevant capital sits with crypto-native pre-seed funds and angels, several with direct precedent in this category:
+
+* Thesis-driven crypto infra funds: 1kx, Shima Capital, Archetype, Variant, Robot Ventures, Electric Capital.
+
+* Direct-precedent investors: Race Capital and Hashed (co-led Notifi's seed); Animoca's Sparkle Ventures and MoonPay Ventures (backed Absolute Labs and Cookie3).
+
+* Strategic and ecosystem: Coinbase Ventures and the Base Ecosystem Fund, reachable via the Base grant relationship; Multicoin if Solana traction develops.
+
+* **Angels and advisors to neutralise the Holder.xyz question:** operators from XMTP, Notifi, and Klaviyo, plus, ideally, a post-mortem conversation with Holder's founders, brought in as advisors.
+
+# **9\. Risks and Mitigations**
+
+We present the risks a sophisticated crypto and SaaS investor will probe, with the company's mitigation for each. Surfacing these directly is a deliberate choice; diligence rewards candour.
+
+| Risk | Sev. | Mitigation |
+| :---- | :---- | :---- |
+| **Wallet-as-personal-data (GDPR)** | High | Keep channel linking strictly opt-in with explicit consent; store linkage off-chain and deletable; document a DSAR/erasure workflow; lead with the ZK identity bridge as privacy-by-design (see 9.1). |
+| **Customer concentration** | Med | Mitigated by the signed Surgence channel (40-plus companies) and the Moonwell relationship; the first cohort comes from a diversified partner base, not a single account. |
+| **Platform / data dependency** | Med | Reliance on Alchemy, Neynar, Dune, and chain RPCs is hedged with a redundant data source per chain and self-hosted nodes for the top two chains. |
+| **Email deliverability for crypto** | Med | Crypto email is heavily filtered; mitigate with SES warm-up, dedicated IPs, and strict SPF/DKIM/DMARC, and lean on in-app push, which sidesteps the issue entirely. |
+| **Market timing / “why now”** | Med | Holder closing, Spindl’s acquisition, XMTP’s Series B and Push’s pivot show a category in flux; the retention layer is the open frontier. |
+| **Moat durability** | Med | Quantify the PNS’s integration-time savings versus per-protocol Dune queries; compound the cross-protocol benchmark data network effect. |
+| **Budget cyclicality** | Med | Crypto marketing budgets swing with market cycles; favor annual prepay contracts and anchor on in-app push, the lowest-cost, highest-retention channel. |
+
+## **9.1 The privacy question, addressed directly**
+
+In 2025 the European Data Protection Board adopted guidelines treating blockchain identifiers, including public keys and wallet addresses, as data that can indirectly identify a person, and reaffirmed that technical immutability does not excuse non-compliance with rights such as erasure. **This is the most important regulatory question for any wallet-identity business, and the company treats it as a first-class design constraint, not an afterthought.** OnchainSuite’s architecture is built for it: channel handles are linked off-chain in deletable storage, linking is consent-gated, and the zero-knowledge identity bridge minimises exposed data by design. The use-of-funds reserve includes a formal privacy/legal review before scaling into EU markets.
+
+*Source: EDPB Guidelines 02/2025 on processing personal data through blockchains (adopted April 2025; consultation closed June 2025; final text pending). Also, CNIL guidance, William Fry and Lexology analyses.*
+
+# **10\. Team and Roadmap**
+
+## **10.1 Founding team**
+
+The three founders own and run Datum Labs together, and bring directly relevant, ecosystem-embedded experience to OnchainSuite. This is not a team learning the market; it is a team that already works in it daily.
+
+| Name | Role | Background |
+| :---- | :---- | :---- |
+| Olusegun | Co-founder / Product Lead | Head of Onchain Data & CRM at Surgence; has launched more email- and on-chain-linked campaigns than almost anyone, and built extensive Dune and custom dashboards |
+| Joel Obafemi | Co-founder / Head of Analytics | Data Contributor and Super Delegate at Moonwell; builder of numerous on-chain data solutions and dashboards |
+| Joshua Obafemi | Co-founder / CTO | Senior Developer at Cherry Servers; technical architecture, security, and infrastructure |
+
+The founding team's positions inside Surgence and Moonwell are a direct advantage: the company's two design partners are organisations the founders already work within, which is why the partnerships are real, and the Surgence distribution agreement is signed. A full-time developer and a customer-success / growth hire are funded from revenue as it grows, not from the raise.
+
+## **10.2 Product roadmap**
+
+Email activation is live today. The roadmap below builds on it; each phase is independently shippable.
+
+| Phase | Theme | Contents |
+| :---- | :---- | :---- |
+| **Live** | Email activation | Behaviour-triggered email campaigns, segments, templates, and analytics in production |
+| **Next** | Wallet identity \+ In-app push \+ Plays | Wallet-primary profile schema; in-app push SDK; Plays library (pre-built automations); sub-10-minute first-mile |
+| **Then** | Chat channels \+ Peer benchmarks | Telegram and Discord delivery nodes; multi-channel routing; per-channel analytics; cross-protocol benchmark display |
+
+X and Farcaster are deliberately out of scope for now: the X API carries prohibitive cost and legal constraints, and Farcaster's activity is contracting. Telegram and Discord, where Web3 communities actually congregate, are the higher-value additions and are prioritised accordingly.
+
+## **10.3 Milestones for this round**
+
+1. Ship wallet-first identity, in-app push, and the Plays library (months 0–3).
+
+2. Go live with the Surgence integration and onboard the first 5–10 paying customers: the trigger for the second funding tranche (months 3–6).
+
+3. Publish a quantified Moonwell retention case study (month 3–4).
+
+4. Land at least one chain ecosystem grant and PR it (months 3–9).
+
+5. Expand beyond the Surgence base via founder-led sales, then raise the next round from strength at a higher valuation (months 6–15).
+
+**Contact**
+
+Datum Labs · OnchainSuite · info@onchainsuite.com
+
+*Confidential. This document contains forward-looking projections that involve risk and uncertainty; actual results may differ materially. Not an offer to sell securities.*  

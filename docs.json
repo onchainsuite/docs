@@ -1,68 +1,129 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "Onchain Suite Docs",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#1727E0",
+    "light": "#2F94FF",
+    "dark": "#010F31"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "/logo/Icon_light.png",
+  "logo": {
+    "light": "/logo/light.png",
+    "dark": "/logo/dark.png"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "Website",
+        "href": "https://onchainsuite.com"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Visit Onchain Suite",
+      "href": "https://onchainsuite.com"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Use the Platform",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Getting Started",
             "pages": [
               "index",
-              "quickstart",
-              "development"
+              "getting-started/overview",
+              "getting-started/create-your-workspace",
+              "getting-started/set-up-project-settings",
+              "getting-started/send-your-first-campaign"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Campaigns",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "campaigns/overview",
+              "campaigns/create-a-campaign",
+              "campaigns/email-editor",
+              "campaigns/template-library",
+              "campaigns/preview-and-test-send",
+              "campaigns/launch-and-monitor"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Audience",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "audience/overview",
+              "audience/unified-profiles",
+              "audience/segments",
+              "audience/imports-and-exports",
+              "audience/health-and-churn"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Intelligence",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "intelligence/overview",
+              "intelligence/sql-query-editor",
+              "intelligence/starter-queries",
+              "intelligence/generate-sql",
+              "intelligence/saved-reports",
+              "intelligence/segments-from-queries"
+            ]
+          },
+          {
+            "group": "Automation",
+            "pages": [
+              "automation/overview",
+              "automation/create-an-automation",
+              "automation/triggers-and-conditions",
+              "automation/contract-based-flows",
+              "automation/connect-to-campaigns"
+            ]
+          },
+          {
+            "group": "Project Settings",
+            "pages": [
+              "settings/overview",
+              "settings/branding",
+              "settings/sender-verification",
+              "settings/domain-authentication",
+              "settings/dns-records",
+              "settings/team-members"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              "integrations/in-app-notifications",
+              "integrations/api-keys",
+              "integrations/webhook-events",
+              "integrations/wallet-and-contract-data",
+              "integrations/third-party-connections"
+            ]
+          },
+          {
+            "group": "Help",
+            "pages": [
+              "help/faq",
+              "help/troubleshooting",
+              "help/glossary"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Build on the Platform",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Developers",
             "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/overview",
+              "api/authentication",
+              "api/webhooks",
+              "api/rate-limits"
             ]
           }
         ]
@@ -71,52 +132,23 @@
     "global": {
       "anchors": [
         {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+          "anchor": "Onchain Suite",
+          "href": "https://onchainsuite.com",
+          "icon": "globe"
         }
       ]
     }
   },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
   "contextual": {
     "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "perplexity",
+      "mcp",
+      "cursor",
+      "vscode"
+    ]
   }
 }

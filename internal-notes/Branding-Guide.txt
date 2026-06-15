@@ -1,0 +1,171 @@
+# Onchain Suite Branding Guide
+
+Source: designer-provided brand board screenshot shared on 2026-06-15.
+
+This file is intended to be reusable in frontend codebases as a single source of truth for color, typography, gradients, and motif usage.
+
+## Brand Positioning
+
+Onchain Suite should feel:
+
+- Crypto-native
+- Trustworthy
+- Technical, but not cold
+- Clear for marketers and operators
+- Premium without feeling corporate or over-designed
+
+## Core Colors
+
+### Primary Palette
+
+- `Cloud`: `#F0F7FF`
+- `Electric Blue`: `#1727E0`
+- `Midnight`: `#010F31`
+- `Sky`: `#2F94FF`
+- `Accent Orange`: `#FF6828`
+
+### Neutral Palette
+
+- `White`: `#FFFFFF`
+- `Black`: `#000000`
+
+## Recommended Usage
+
+- Use `#1727E0` as the primary brand color for actions, active states, and key highlights.
+- Use `#010F31` for dark surfaces, strong text, and premium contrast moments.
+- Use `#2F94FF` for secondary highlights, supporting UI emphasis, and lighter gradient transitions.
+- Use `#F0F7FF` for soft backgrounds, cards, panels, and light UI framing.
+- Use `#FF6828` sparingly for accents, alerts, and CTA emphasis.
+
+## Gradients
+
+### Primary Gradient
+
+```css
+linear-gradient(90deg, #F0F7FF 0%, #1727E0 50%, #010F31 100%)
+```
+
+### Bright Blue Gradient
+
+```css
+linear-gradient(90deg, #F0F7FF 0%, #2F94FF 50%, #1727E0 100%)
+```
+
+### Blue Gradient
+
+```css
+linear-gradient(90deg, #2F94FF 0%, #1727E0 100%)
+```
+
+### Accent Gradient
+
+```css
+linear-gradient(90deg, #FF6828 0%, #1727E0 50%, #010F31 100%)
+```
+
+## Typography
+
+### Font Family
+
+- Primary typeface: `Instrument Sans`
+- Fallback stack: `Instrument Sans, Inter, ui-sans-serif, system-ui, sans-serif`
+
+### Type Tokens
+
+- `Heading`: `69px`, `700`, `-1px`
+- `Subheading`: `48px`, `600`, `-1px`
+- `Body`: `28px`, `400`, `0px`
+
+These sizes come from the designer guide and appear to be reference sizes for brand comps rather than direct production UI sizes. For product UI, scale them into a practical type ramp while preserving the weight and spacing relationships.
+
+## Brand Motif
+
+The brand motif is derived from the Onchain Suite logo mark:
+
+- Circular split form
+- Vertical spine/stem
+- Soft geometric edges
+- Strong silhouette even in monochrome
+
+### Recommended Motif Usage
+
+- Faint background watermark
+- Section divider or hero embellishment
+- Mask or framing device for gradients
+- Container shape for icons, avatars, or KPI art
+
+### Avoid
+
+- Stretching or distorting the motif
+- Rotating it arbitrarily
+- Using the motif at high opacity behind dense body text
+- Combining too many gradients and motif layers in one component
+
+## Frontend Tokens
+
+### CSS Variables
+
+```css
+:root {
+  --os-color-cloud: #F0F7FF;
+  --os-color-electric-blue: #1727E0;
+  --os-color-midnight: #010F31;
+  --os-color-sky: #2F94FF;
+  --os-color-accent-orange: #FF6828;
+  --os-color-white: #FFFFFF;
+  --os-color-black: #000000;
+
+  --os-gradient-primary: linear-gradient(90deg, #F0F7FF 0%, #1727E0 50%, #010F31 100%);
+  --os-gradient-bright-blue: linear-gradient(90deg, #F0F7FF 0%, #2F94FF 50%, #1727E0 100%);
+  --os-gradient-blue: linear-gradient(90deg, #2F94FF 0%, #1727E0 100%);
+  --os-gradient-accent: linear-gradient(90deg, #FF6828 0%, #1727E0 50%, #010F31 100%);
+
+  --os-font-sans: "Instrument Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+```
+
+### TypeScript Tokens
+
+```ts
+export const onchainSuiteBrand = {
+  colors: {
+    cloud: "#F0F7FF",
+    electricBlue: "#1727E0",
+    midnight: "#010F31",
+    sky: "#2F94FF",
+    accentOrange: "#FF6828",
+    white: "#FFFFFF",
+    black: "#000000",
+  },
+  gradients: {
+    primary: "linear-gradient(90deg, #F0F7FF 0%, #1727E0 50%, #010F31 100%)",
+    brightBlue: "linear-gradient(90deg, #F0F7FF 0%, #2F94FF 50%, #1727E0 100%)",
+    blue: "linear-gradient(90deg, #2F94FF 0%, #1727E0 100%)",
+    accent: "linear-gradient(90deg, #FF6828 0%, #1727E0 50%, #010F31 100%)",
+  },
+  typography: {
+    fontFamily: ['Instrument Sans', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+    display: { fontSize: 69, fontWeight: 700, letterSpacing: -1 },
+    heading: { fontSize: 48, fontWeight: 600, letterSpacing: -1 },
+    body: { fontSize: 28, fontWeight: 400, letterSpacing: 0 },
+  },
+} as const;
+```
+
+## Implementation Notes
+
+- Use `Midnight` and `White` for the strongest contrast pair.
+- Use `Cloud` instead of pure white backgrounds when a softer product feel is needed.
+- Reserve `Accent Orange` for emphasis rather than broad UI coverage.
+- Use gradients on hero areas, banners, and charts more than on dense form-heavy screens.
+- Preserve the logo and motif geometry consistently across docs, product, and marketing surfaces.
+
+## Follow-Up
+
+If the designer shares the original Figma file or exact export specs, update this guide with:
+
+- official token names
+- exact gradient stops
+- production typography scale
+- spacing and radius system
+- logo clearspace and minimum-size rules

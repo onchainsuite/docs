@@ -1,0 +1,26 @@
+---
+title: "Webhooks"
+description: "Use webhooks to send product events into Onchain Suite and connect external systems to lifecycle workflows."
+---
+
+## Why Webhooks Matter
+
+Webhooks close the gap between product activity and messaging logic. They are useful when the behavior you care about happens in your app, backend, or partner system rather than directly onchain.
+
+## Strong Webhook Use Cases
+
+- Trigger an automation after a product milestone.
+- Update audience eligibility from backend state changes.
+- Sync outcomes from external workflows back into lifecycle logic.
+- Enrich a wallet-first profile with product behavior.
+
+## Event Design Principles
+
+- Use stable, descriptive event names.
+- Include timestamps and identifiers explicitly.
+- Keep payload shapes consistent over time.
+- Make retries safe and idempotent.
+
+## Recommendation
+
+Design webhook events around business moments, not internal implementation details. That makes them easier for growth, lifecycle, and engineering teams to share.

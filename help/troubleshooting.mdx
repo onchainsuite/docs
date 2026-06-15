@@ -1,0 +1,38 @@
+---
+title: "Troubleshooting"
+description: "Common issues when setting up campaigns, domains, automations, and audience logic in Onchain Suite."
+---
+
+## Campaign Problems
+
+### Test Send Did Not Arrive
+
+Possible causes include unverified sender settings, domain authentication still propagating, or the message being filtered by the receiving inbox.
+
+### Audience Size Looks Wrong
+
+Review segment logic, date filters, and exclusion rules before launching.
+
+## Domain Problems
+
+### Domain Will Not Verify
+
+Check that every DNS record is added exactly as shown and that you are editing the correct DNS zone.
+
+### Verification Is Stuck Pending
+
+DNS propagation can take time. Re-check later before re-entering the records.
+
+## Automation Problems
+
+### Trigger Did Not Fire
+
+Confirm the source event actually occurred, the event mapping is correct, and the automation is published.
+
+### Users Entered the Wrong Branch
+
+Review condition order, fallback paths, and any missing event properties.
+
+## When To Escalate
+
+Escalate with the project name, affected sender or domain, campaign or automation ID, expected behavior, actual behavior, and timestamps for the failing event.

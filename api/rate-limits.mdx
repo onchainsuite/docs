@@ -1,0 +1,12 @@
+---
+title: "Rate Limits"
+description: "Plan integrations so they remain reliable under load and respect platform limits."
+---
+
+## Guidance
+
+- Batch work where possible.
+- Back off and retry on limit responses.
+- Avoid bursty client-side traffic.
+- Keep ingestion and background jobs idempotent.
+- Prefer steady server-side delivery over spiky browser-driven request patterns.
