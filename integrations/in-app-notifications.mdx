@@ -1,31 +1,264 @@
 ---
-title: "In-App Notifications"
-description: "Connect in-app messaging with your campaign and lifecycle workflows."
+title: In-App Notifications (Wallet-Based)
+description: Wallet-authenticated in-app push notifications via publishable keys, signed challenges, and real-time Socket.IO delivery.
 ---
 
-## Why In-App Matters
+## Overview
 
-In-app delivery is often the highest-leverage channel in Onchain Suite because it reaches connected wallets without DNS setup, inbox warm-up, or prior email matching.
+The in-app system lets you deliver real-time, wallet-targeted notifications to your users without requiring email or phone numbers.
 
-## How It Fits The Platform
+It consists of:
 
-A typical in-app flow looks like this:
+- A dashboard configuration surface to manage allowed browser origins and publishable keys.
+- A public two-step wallet authentication flow (challenge → verify) using a publishable key (`pk_*`).
+- A Socket.IO gateway that streams pushes to connected clients and replays pending pushes on reconnect.
+- A server-to-server API to send pushes using a secret key (`sk_*`).
 
-1. Your app requests a challenge for a connected wallet.
-2. The wallet signs and verifies.
-3. Onchain Suite issues a short-lived in-app session.
-4. The client registers and listens for live notification events.
-5. Automation or campaign logic pushes the message into the user experience.
+## Concepts
 
-## Good Use Cases
+### Keys
 
-- Remind users to finish onboarding.
-- Announce claim windows or mint deadlines.
-- Reinforce campaign CTAs after an email send.
-- Trigger product messages from contract or wallet activity.
+- **Publishable key (`pk_*`)**: safe to use in the browser. Used only for the challenge/verify flow.
+- **Secret key (`sk_*`)**: server-to-server only. Used to send pushes programmatically.
 
-## Best Practices
+### Allowed origins
 
-- Treat in-app as part of a broader lifecycle journey, not an isolated alert channel.
-- Align in-app timing with campaign and automation ownership.
-- Use it early in onboarding when email identity may not exist yet.
+The in-app runtime requires an `Origin` match against your allowed origin list.
+
+- `pk_live_*` keys map to **production** origin entries.
+- `pk_test_*` keys map to **development** origin entries.
+
+## Dashboard setup (Integrations)
+
+These endpoints are intended for your internal dashboard UI (cookie session auth + org role).
+
+### 1) Check in-app integration status
+
+`GET /integrations/inapp/status`
+
+Returns:
+
+- publishable keys
+- available secret keys
+- currently connected SDK sessions
+- daily usage limit and usage
+- allowed origin count
+
+### 2) Allow your frontend origin
+
+`POST /integrations/inapp/origins`
+
+Body:
+
+```json
+{
+  "origin": "https://app.example.com",
+  "environment": "production"
+}
+```
+
+### 3) Send a test push (optional)
+
+`POST /integrations/inapp/test-push`
+
+Body:
+
+```json
+{
+  "walletAddress": "0xabc...",
+  "title": "Test notification",
+  "body": "Your in-app integration is working.",
+  "ctaLabel": "Open",
+  "ctaUrl": "https://app.example.com"
+}
+```
+
+## Browser SDK auth flow (challenge → verify)
+
+The browser flow uses a publishable key (`pk_*`) plus an origin allowlist check.
+
+### Step 1 — Request a challenge message
+
+`POST /inapp/challenge`
+
+Headers:
+
+- `x-publishable-key: pk_live_...` (or `Authorization: Bearer pk_live_...`)
+- `Origin: https://app.example.com`
+
+Body:
+
+```json
+{
+  "walletAddress": "0xabc..."
+}
+```
+
+Response:
+
+```json
+{
+  "nonceId": "f3c1...",
+  "message": "OnchainSuite In-App Push\n\nWallet: 0xabc...\nNonce: ...\nIssued At: ...\nExpires At: ...",
+  "expiresAt": "2026-06-22T00:00:00.000Z"
+}
+```
+
+### Step 2 — Sign and verify
+
+The wallet must sign the returned `message` (EIP-191 `signMessage`) and send it to `/inapp/verify`.
+
+`POST /inapp/verify`
+
+Headers:
+
+- `x-publishable-key: pk_live_...` (or `Authorization: Bearer pk_live_...`)
+- `Origin: https://app.example.com`
+
+Body:
+
+```json
+{
+  "walletAddress": "0xabc...",
+  "signature": "0x..."
+}
+```
+
+Response:
+
+```json
+{
+  "token": "<inapp-session-jwt>",
+  "wsUrl": "https://api.onchainsuite.com/api/v1/inapp/register",
+  "expiresAt": "2026-06-29T00:00:00.000Z"
+}
+```
+
+### Example: signing with ethers
+
+```ts
+import { BrowserProvider } from "ethers";
+
+const provider = new BrowserProvider(window.ethereum);
+const signer = await provider.getSigner();
+const signature = await signer.signMessage(message);
+```
+
+## Real-time delivery via Socket.IO
+
+After verification, connect a Socket.IO client to the `wsUrl` returned by `/inapp/verify`.
+
+Socket.IO path:
+
+- `/api/v1/inapp/register`
+
+Auth options supported by the server:
+
+- `handshake.auth.token = <session jwt>`
+- or `Authorization: Bearer <session jwt>`
+- or query param `?t=<session jwt>`
+
+### Example: connect and listen for pushes
+
+```ts
+import { io } from "socket.io-client";
+
+const socket = io("https://api.onchainsuite.com", {
+  path: "/api/v1/inapp/register",
+  transports: ["websocket"],
+  auth: { token },
+});
+
+socket.on("connect", () => {
+  socket.emit("REGISTER", { walletAddress });
+});
+
+socket.on("PUSH", (push) => {
+  // push shape includes: deliveryId, campaignRunId, title, body, cta?, createdAt, expiresAt
+  console.log("Push received", push);
+  socket.emit("EVENT", {
+    campaignRunId: push.campaignRunId,
+    deliveryId: push.deliveryId,
+    type: "delivered",
+  });
+});
+```
+
+### Client events
+
+- `REGISTER` (optional but recommended): confirms the wallet for the connection
+- `EVENT`: records interaction events (`delivered`, `viewed`, `dismissed`, `clicked`)
+
+The server will disconnect the socket if the client tries to report events for a wallet other than the one in the session token.
+
+## Sending pushes (server-to-server)
+
+Use this when you want maximum control from your own backend (or an external relay).
+
+`POST /inapp/push`
+
+Auth:
+
+- `Authorization: Bearer sk_...` (or `x-secret-key: sk_...`)
+
+Body:
+
+```json
+{
+  "walletAddress": "0xabc...",
+  "title": "You received tokens",
+  "body": "A transfer just hit your wallet.",
+  "ctaLabel": "View transaction",
+  "ctaUrl": "https://app.example.com/tx/0x...",
+  "automationId": "goldrush_transfer_alert"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "campaignRunId": "cr_...",
+  "deliveryId": "d_...",
+  "deliveredNow": true,
+  "expiresAt": "2026-06-25T00:00:00.000Z"
+}
+```
+
+## Automations integration (sending in-app from workflows)
+
+Automations can send in-app pushes to one or many wallets. Internally the system:
+
+- creates a `CampaignRun` for tracking
+- writes a `DeliveryEvent` row for analytics (`sent`, plus interaction events)
+- stores a short-lived pending list per wallet in cache (replayed on reconnect)
+
+If multiple wallets are targeted by one automation step, pushes are deduplicated and sent as a bulk operation.
+
+## Limits, TTLs, and environment variables
+
+### Push TTL
+
+- Pushes expire after `ttlHours` (clamped to 1..72 hours, default 72).
+- Expired/dismissed/clicked pushes are pruned and won’t be replayed.
+- Per-wallet pending list is capped to the **10 most recent** pushes.
+
+### Daily quota
+
+- `INAPP_DAILY_LIMIT` (default `50000`) limits pushes per org per UTC day (429 if exceeded).
+
+### Session token TTL and secrets
+
+- `INAPP_SESSION_SECRET` must be set (fallbacks: `JWT_ACCESS_SECRET`, `BETTER_AUTH_SECRET`)
+- `INAPP_SESSION_TTL_SECONDS` controls session expiry (clamped to 10 minutes..30 days; default 7 days)
+
+## Troubleshooting
+
+- If `/inapp/challenge` or `/inapp/verify` returns `Origin not allowed`:
+  - confirm the browser’s `Origin` matches the configured allowed origin exactly (scheme + host + port)
+  - confirm you used the correct publishable key (`pk_live_*` vs `pk_test_*`)
+- If pushes are not delivered live:
+  - confirm the client is connected to Socket.IO and listening for `PUSH`
+  - `deliveredNow: false` means the wallet was offline; the push will be replayed on reconnect until it expires
+
