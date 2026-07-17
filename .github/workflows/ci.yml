@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main, dev]
+  push:
+    branches: [main, dev]
+
+jobs:
+  validate:
+    name: Validate docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate docs.json syntax
+        run: node -e "JSON.parse(require('fs').readFileSync('docs.json','utf8')); console.log('docs.json is valid JSON')"
+
+      - name: Check navigation pages exist
+        run: |
+          node -e '
+            const fs = require("fs");
+            const docs = JSON.parse(fs.readFileSync("docs.json", "utf8"));
+            const pages = [];
+            (function walk(node) {
+              if (Array.isArray(node)) return node.forEach(walk);
+              if (typeof node === "string") return pages.push(node);
+              if (node && typeof node === "object") {
+                if (node.pages) walk(node.pages);
+                if (node.groups) walk(node.groups);
+                if (node.tabs) walk(node.tabs);
+              }
+            })(docs.navigation);
+            const missing = pages.filter(p => !fs.existsSync(p + ".mdx") && !fs.existsSync(p + ".md"));
+            if (missing.length) {
+              console.error("Navigation references missing pages:\n" + missing.join("\n"));
+              process.exit(1);
+            }
+            console.log(`All ${pages.length} navigation pages exist`);
+          '
+
+      - name: Install Mintlify CLI
+        run: npm install -g mint
+
+      - name: Check for broken links
+        run: mint broken-links
