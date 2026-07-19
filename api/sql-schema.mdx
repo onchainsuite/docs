@@ -1,0 +1,437 @@
+---
+title: "SQL Schema Reference"
+description: "Every table, column, and type you can query in the Intelligence SQL editor, plus the rules the validator enforces."
+---
+
+The Intelligence SQL editor runs read-only `SELECT` queries over a curated, organization-scoped schema. Every table below is pre-filtered to your workspace before your query runs, so a query can never read another organization's data — even if you join across tables.
+
+## Query rules
+
+| Rule | Value |
+| --- | --- |
+| Statement type | `SELECT` only |
+| Max rows returned | 500 (results truncate with a notice) |
+| Statement timeout | 5 seconds |
+| Max query length | 10,000 characters |
+| Transaction mode | `READ ONLY` |
+
+Also enforced:
+
+- **No semicolons** anywhere in the query.
+- **No SQL comments** — `--`, `/*`, and `*/` are all rejected.
+- **No double quotes**, so no quoted identifiers. Use bare `snake_case` names.
+- **Your query must begin with `SELECT`.** A leading `WITH` is rejected — see [Common gotchas](#common-gotchas).
+- Every table after `FROM` or `JOIN` must be one of the ten tables listed below.
+
+Saved SQL runs are free and never consume AI credits. Credits apply only when you *generate* SQL from a prompt.
+
+<Note>
+Identical queries completing within 10 minutes of each other are served from cache and return `cacheHit: true` without re-executing.
+</Note>
+
+## Reading the type column
+
+`TIMESTAMP` values serialize as ISO 8601 strings. `JSONB` columns come back as parsed objects. Note that **`BIGINT` and `NUMERIC` values are returned as strings**, not numbers — all the aggregate counts and rate columns in `campaign_performance` and the `email_*` counters in `contact_360` are affected. Cast in your client before doing arithmetic.
+
+## Tables
+
+### `contacts`
+
+Your audience contacts — wallet-first identity with optional email and name.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `email` | `TEXT` |
+| `email_hmac` | `TEXT` nullable |
+| `first_name` | `TEXT` nullable |
+| `last_name` | `TEXT` nullable |
+| `wallet_address` | `TEXT` nullable |
+| `score` | `DOUBLE PRECISION` |
+| `metadata` | `JSONB` |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+### `delivery_events`
+
+Per-recipient message events across email and in-app push.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `campaign_run_id` | `TEXT` |
+| `delivery_id` | `TEXT` |
+| `wallet_address` | `TEXT` nullable |
+| `recipient_hmac` | `TEXT` nullable |
+| `channel` | `TEXT` |
+| `event_type` | `TEXT` |
+| `occurred_at` | `TIMESTAMP` |
+| `metadata` | `JSONB` nullable |
+
+<Warning>
+`campaign_run_id` identifies a *send run*, not a campaign. To attribute events to a campaign, join on `metadata->>'campaignId'` — there is no `campaign_id` column.
+</Warning>
+
+### `audience_profiles`
+
+Wallet profiles with channel reachability and ENS. Keyed by `(organization_id, wallet_address)` — there is no `id` column.
+
+| Column | Type |
+| --- | --- |
+| `organization_id` | `TEXT` |
+| `wallet_address` | `TEXT` |
+| `created_at` | `TIMESTAMP` |
+| `last_activity` | `TIMESTAMP` nullable |
+| `channels` | `JSONB` |
+| `ens_name` | `TEXT` nullable |
+| `inapp_eligible` | `BOOLEAN` |
+
+### `audience_segments`
+
+Saved segments — wallet lists or rule criteria.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `name` | `TEXT` |
+| `criteria` | `JSONB` |
+| `starred` | `BOOLEAN` |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+### `campaigns`
+
+Campaigns with status, type, and UTM parameters lifted out of the tracking JSON.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `name` | `TEXT` |
+| `subject` | `TEXT` nullable |
+| `status` | `TEXT` |
+| `type` | `TEXT` |
+| `stats` | `JSONB` nullable |
+| `tracking` | `JSONB` nullable |
+| `smart_sending` | `BOOLEAN` |
+| `tracking_parameters` | `BOOLEAN` |
+| `utm_source` | `TEXT` nullable |
+| `utm_medium` | `TEXT` nullable |
+| `utm_campaign` | `TEXT` nullable |
+| `utm_term` | `TEXT` nullable |
+| `utm_content` | `TEXT` nullable |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+### `campaign_performance`
+
+Per-campaign engagement rollup, ready for reporting. Derived — one row per campaign, no per-recipient grain.
+
+| Column | Type |
+| --- | --- |
+| `campaign_id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `name` | `TEXT` |
+| `status` | `TEXT` |
+| `smart_sending` | `BOOLEAN` |
+| `utm_source` | `TEXT` nullable |
+| `utm_medium` | `TEXT` nullable |
+| `utm_campaign` | `TEXT` nullable |
+| `sent` | `BIGINT` |
+| `delivered` | `BIGINT` |
+| `opens` | `BIGINT` |
+| `unique_opens` | `BIGINT` |
+| `clicks` | `BIGINT` |
+| `unique_clicks` | `BIGINT` |
+| `unsubscribes` | `BIGINT` |
+| `bounces` | `BIGINT` |
+| `complaints` | `BIGINT` |
+| `open_rate` | `NUMERIC` |
+| `click_rate` | `NUMERIC` |
+| `last_event_at` | `TIMESTAMP` nullable |
+
+`sent` counts both `email.sent` and `email.queued`. Rates are computed as unique events over `sent`, rounded to 4 decimal places, and are `NULL` when nothing has been sent.
+
+### `user_onchain_metrics`
+
+Enriched per-wallet metrics: portfolio value, 90-day activity, LTV estimate, engagement score. One row per wallet.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `user_id` | `TEXT` nullable |
+| `wallet_address` | `TEXT` |
+| `primary_chain` | `TEXT` nullable |
+| `volume_last_90d` | `DOUBLE PRECISION` |
+| `transaction_count_90d` | `INTEGER` |
+| `engagement_score` | `INTEGER` |
+| `est_ltv` | `DOUBLE PRECISION` |
+| `portfolio_value_usd` | `DOUBLE PRECISION` nullable |
+| `total_token_count` | `INTEGER` |
+| `nft_collection_count` | `INTEGER` |
+| `nft_item_count` | `INTEGER` |
+| `last_enriched_at` | `TIMESTAMP` nullable |
+| `last_source` | `TEXT` nullable |
+| `metadata` | `JSONB` |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+### `wallet_activity_summary`
+
+Activity summary per wallet **per chain**.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `user_id` | `TEXT` nullable |
+| `wallet_address` | `TEXT` |
+| `chain` | `TEXT` |
+| `transaction_count` | `INTEGER` |
+| `volume_usd` | `DOUBLE PRECISION` |
+| `active_days_30d` | `INTEGER` |
+| `active_days_90d` | `INTEGER` |
+| `first_activity_at` | `TIMESTAMP` nullable |
+| `last_activity_at` | `TIMESTAMP` nullable |
+| `summary` | `JSONB` |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+### `nft_holdings`
+
+NFT holdings per wallet: collections, items, floor prices. One row per `(wallet, chain, contract, token_id)`.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `user_id` | `TEXT` nullable |
+| `wallet_address` | `TEXT` |
+| `chain` | `TEXT` |
+| `contract_address` | `TEXT` |
+| `token_id` | `TEXT` |
+| `collection_name` | `TEXT` nullable |
+| `item_name` | `TEXT` nullable |
+| `balance` | `TEXT` nullable |
+| `floor_price_quote` | `DOUBLE PRECISION` nullable |
+| `image_url` | `TEXT` nullable |
+| `last_transferred_at` | `TIMESTAMP` nullable |
+| `metadata` | `JSONB` |
+| `created_at` | `TIMESTAMP` |
+| `updated_at` | `TIMESTAMP` |
+
+<Note>
+`balance` is `TEXT` because ERC-1155 balances can exceed native integer range. Cast it (`balance::numeric`) before comparing or summing.
+</Note>
+
+### `contact_360`
+
+The customer-360 view — one row per contact, joining identity, on-chain metrics, activity, and email engagement, plus derived churn signals. This is usually the fastest place to start.
+
+| Column | Type |
+| --- | --- |
+| `contact_id` | `TEXT` |
+| `email` | `TEXT` |
+| `first_name` | `TEXT` nullable |
+| `last_name` | `TEXT` nullable |
+| `wallet_address` | `TEXT` nullable |
+| `score` | `DOUBLE PRECISION` |
+| `primary_chain` | `TEXT` nullable |
+| `portfolio_value_usd` | `DOUBLE PRECISION` nullable |
+| `engagement_score` | `INTEGER` nullable |
+| `est_ltv` | `DOUBLE PRECISION` nullable |
+| `transaction_count_90d` | `INTEGER` nullable |
+| `volume_last_90d` | `DOUBLE PRECISION` nullable |
+| `total_token_count` | `INTEGER` nullable |
+| `nft_collection_count` | `INTEGER` nullable |
+| `last_enriched_at` | `TIMESTAMP` nullable |
+| `activity_tx_count` | `INTEGER` nullable |
+| `activity_volume_usd` | `DOUBLE PRECISION` nullable |
+| `active_days_90d` | `INTEGER` nullable |
+| `last_activity_at` | `TIMESTAMP` nullable |
+| `email_opens` | `BIGINT` |
+| `email_clicks` | `BIGINT` |
+| `email_bounces` | `BIGINT` |
+| `email_complaints` | `BIGINT` |
+| `last_email_open_at` | `TIMESTAMP` nullable |
+| `suppressed` | `BOOLEAN` |
+| `days_since_last_activity` | `INTEGER` nullable |
+| `churn_risk` | `TEXT` |
+
+`contact_360` has **no `organization_id` column** — it's already scoped to your workspace.
+
+## Column values
+
+Several `TEXT` columns carry a fixed or conventional set of values.
+
+### `churn_risk`
+
+Exactly one of these, never null:
+
+| Value | Meaning |
+| --- | --- |
+| `suppressed` | Contact is suppressed |
+| `unknown` | No recorded activity |
+| `high` | Last active more than 60 days ago |
+| `medium` | Last active 30–60 days ago |
+| `low` | Active within 30 days |
+
+### `channel`
+
+Uppercase: `EMAIL`, `INAPP`, `TELEGRAM`, `X`, `FARCASTER`, `DISCORD`.
+
+### `event_type`
+
+Open-ended, lowercase and dot-separated. The common values are `email.queued`, `email.sent`, `email.delivered`, `email.open`, `email.click`, `email.bounce`, `email.complaint`, `email.unsubscribe`, `email.failed`, and `email.suppressed`. Because new provider statuses pass through as `email.<status>`, prefer `IN (...)` over `NOT IN (...)` when filtering.
+
+### `status` and `type` (campaigns)
+
+`status`: `DRAFT`, `SCHEDULED`, `SENDING`, `SENT`, `ARCHIVED`, `PAUSED`.
+
+`type`: `EMAIL_BLAST`, `DRIP`, `SMART_SENDING`.
+
+### `chain` and `primary_chain`
+
+Chain slugs such as `eth-mainnet`, `base-mainnet`, `matic-mainnet`, `arbitrum-mainnet`, `optimism-mainnet`, `bsc-mainnet`, `sei-mainnet`, and `solana-mainnet`, plus testnets like `base-sepolia-testnet` and `eth-sepolia`. Defaults to `eth-mainnet` when unspecified.
+
+## Joining tables
+
+Joins are fully supported, including `UNION`, subqueries, and window functions. Because every table is org-scoped before your query runs, cross-tenant joins are structurally impossible.
+
+| From | To | Key |
+| --- | --- | --- |
+| `contacts` | `user_onchain_metrics` | `lower(wallet_address)` |
+| `contacts` | `wallet_activity_summary` | `lower(wallet_address)` |
+| `contacts` | `nft_holdings` / `audience_profiles` | `lower(wallet_address)` |
+| `contacts` | `delivery_events` | `contacts.email_hmac = delivery_events.recipient_hmac` |
+| `campaigns` | `delivery_events` | `campaigns.id = delivery_events.metadata->>'campaignId'` |
+| `campaign_performance` | `campaigns` | `campaign_id = id` |
+| `contact_360` | `contacts` | `contact_id = id` |
+
+<Warning>
+Wallet casing is not normalized on `contacts`. Always join wallets with `lower()` on both sides or you'll silently drop rows.
+</Warning>
+
+`wallet_activity_summary` and `nft_holdings` are per-chain and per-token respectively, so joining them to a per-wallet table fans out rows. Aggregate or filter on `chain` first.
+
+## Common gotchas
+
+<AccordionGroup>
+  <Accordion title="Query must not start with WITH" icon="triangle-exclamation">
+    The validator requires the query to begin with `SELECT`, so a top-level CTE is rejected. Rewrite it as a subquery:
+
+    ```sql
+    -- rejected
+    WITH whales AS (SELECT ...) SELECT * FROM whales
+
+    -- works
+    SELECT * FROM (SELECT ...) AS whales
+    ```
+  </Accordion>
+
+  <Accordion title="Only read-only queries are allowed — on a SELECT" icon="ban">
+    The read-only check scans for banned keywords as plain substrings, so ordinary text can trip it. `DO `, `SET `, `CALL `, and `COPY ` are the easy ones to hit:
+
+    ```sql
+    -- rejected: contains "DO "
+    SELECT * FROM contacts WHERE first_name LIKE 'do %'
+    ```
+
+    Restructure the predicate or match on a different pattern.
+  </Accordion>
+
+  <Accordion title="Unsupported table reference(s)" icon="table">
+    Every name after `FROM` or `JOIN` is checked against the ten tables above, including names you define yourself. Alias your subqueries rather than referencing them as tables.
+  </Accordion>
+
+  <Accordion title="Counts come back as strings" icon="quote-left">
+    `BIGINT` and `NUMERIC` columns serialize as strings. `open_rate` of `0.2500` arrives as `"0.2500"`. Cast client-side before comparing or charting.
+  </Accordion>
+</AccordionGroup>
+
+### Error messages
+
+| Message | Cause |
+| --- | --- |
+| `query is required` | Empty or non-string query |
+| `query too large` | Over 10,000 characters |
+| `Only SELECT queries are allowed` | Query doesn't start with `SELECT` |
+| `Query must not contain semicolons` | Contains `;` |
+| `SQL comments are not allowed` | Contains `--`, `/*`, or `*/` |
+| `Quoted identifiers are not supported in Intelligence SQL` | Contains `"` |
+| `Only read-only queries are allowed` | Matched a banned keyword |
+| `Unsupported table reference(s): …` | Table not in the allowlist |
+| `Query must reference at least one supported table: …` | No `FROM` or `JOIN` found |
+
+## Example queries
+
+```sql
+-- Whales active in the last 90 days
+SELECT wallet_address, portfolio_value_usd, transaction_count_90d
+FROM user_onchain_metrics
+WHERE portfolio_value_usd > 10000
+ORDER BY portfolio_value_usd DESC
+LIMIT 50
+```
+
+```sql
+-- Churn-risk contacts who used to engage
+SELECT email, wallet_address, churn_risk, days_since_last_activity, email_opens
+FROM contact_360
+WHERE churn_risk IN ('medium', 'high') AND email_opens > 0
+ORDER BY days_since_last_activity DESC
+LIMIT 100
+```
+
+```sql
+-- Campaign performance, most recent activity first
+SELECT name, sent, unique_opens, unique_clicks, open_rate, click_rate
+FROM campaign_performance
+ORDER BY last_event_at DESC
+LIMIT 25
+```
+
+```sql
+-- High-value wallets with no email engagement — an in-app push audience
+SELECT c.wallet_address, m.portfolio_value_usd, m.engagement_score
+FROM contacts c
+JOIN user_onchain_metrics m
+  ON lower(m.wallet_address) = lower(c.wallet_address)
+JOIN audience_profiles p
+  ON lower(p.wallet_address) = lower(c.wallet_address)
+WHERE m.portfolio_value_usd > 5000
+  AND p.inapp_eligible = true
+ORDER BY m.portfolio_value_usd DESC
+LIMIT 200
+```
+
+```sql
+-- NFT holders of one collection, deduped to one row per wallet
+SELECT wallet_address,
+       count(*) AS items,
+       max(floor_price_quote) AS best_floor
+FROM nft_holdings
+WHERE chain = 'base-mainnet'
+  AND lower(contract_address) = lower('0xYourCollection')
+GROUP BY wallet_address
+ORDER BY items DESC
+LIMIT 100
+```
+
+```sql
+-- Clicked a campaign, then stayed active onchain
+SELECT c.email, c.wallet_address, w.last_activity_at, w.transaction_count
+FROM contacts c
+JOIN delivery_events e
+  ON e.recipient_hmac = c.email_hmac
+JOIN wallet_activity_summary w
+  ON lower(w.wallet_address) = lower(c.wallet_address)
+WHERE e.event_type = 'email.click'
+  AND w.last_activity_at > e.occurred_at
+ORDER BY w.last_activity_at DESC
+LIMIT 100
+```

@@ -1,31 +1,105 @@
 ---
 title: "SQL Query Editor"
-description: "Use SQL in Onchain Suite to explore user, wallet, and contract activity data for audience building."
+description: "Query wallet, contact, and campaign data directly to build precise audiences and reports."
 ---
 
-## What It Does
+The SQL editor is for when a rule builder isn't precise enough — when the cohort you want combines on-chain behavior, audience state, and messaging history in one definition.
 
-The SQL query editor is for operators and analysts who need more precision than simple rule builders. It is especially useful when you want to combine onchain behavior, audience state, and messaging history in one cohort definition.
+Queries run read-only against a curated schema that's already scoped to your workspace. You cannot see another organization's data, and you cannot write.
 
-## Common Questions To Answer
+## What you can query
 
-- Which wallets interacted with a contract recently but have not converted?
-- Which contacts clicked a campaign and then returned onchain?
-- Which users have high-value wallet activity but low recent engagement?
-- Which cohort should move into a campaign, report, or automation next?
+Ten tables are available. The two you'll reach for most:
 
-## What You Can Query
+<CardGroup cols={2}>
+  <Card title="contact_360" icon="user">
+    One row per contact, already joining identity, on-chain metrics, activity, and email engagement — plus derived `churn_risk` and `days_since_last_activity`.
+  </Card>
+  <Card title="campaign_performance" icon="chart-line">
+    One row per campaign with sends, opens, clicks, and rates pre-computed.
+  </Card>
+</CardGroup>
 
-The current intelligence model supports tables for audience and delivery analysis such as contacts, delivery events, audience profiles, audience segments, campaigns, user onchain metrics, wallet activity summary, and NFT holdings.
+The rest: `contacts`, `delivery_events`, `audience_profiles`, `audience_segments`, `campaigns`, `user_onchain_metrics`, `wallet_activity_summary`, and `nft_holdings`. Full columns and types are in the [SQL Schema Reference](/api/sql-schema).
 
-## Query Workflow
+Start with `contact_360` before hand-joining `contacts` to the metrics tables — it does that work for you and avoids row fan-out mistakes.
 
-1. Start from a known table or starter query.
-2. Limit the date range while iterating.
-3. Validate a few rows manually.
-4. Save the result as a report or segment.
-5. Reuse the output in campaigns or automation handoff.
+## Rules
+
+| Rule | Value |
+| --- | --- |
+| Statement type | `SELECT` only |
+| Rows returned | 500 max |
+| Timeout | 5 seconds |
+| Query length | 10,000 characters |
+
+No semicolons, no SQL comments, no double-quoted identifiers. Joins, subqueries, `UNION`, and window functions all work.
+
+Two rules surprise people:
+
+- **Your query must start with `SELECT`.** A leading `WITH` is rejected — wrap the CTE as a subquery instead.
+- **The read-only check scans for keywords as plain text**, so `WHERE first_name LIKE 'do %'` trips it. See [Common gotchas](/api/sql-schema#common-gotchas).
+
+## Questions worth asking
+
+- Which wallets interacted with a contract recently but never converted?
+- Which contacts clicked a campaign and then came back on-chain?
+- Which high-value wallets have gone quiet in the last 30 days?
+- Which holders of a collection have never received a message?
+
+```sql
+-- High-value wallets that have gone quiet
+SELECT email, wallet_address, portfolio_value_usd, days_since_last_activity
+FROM contact_360
+WHERE portfolio_value_usd > 5000
+  AND days_since_last_activity > 30
+ORDER BY portfolio_value_usd DESC
+LIMIT 100
+```
+
+## Workflow
+
+<Steps>
+  <Step title="Start from a starter query">
+    Six [starter queries](/intelligence/starter-queries) cover the common shapes. Adapting one beats starting blank.
+  </Step>
+  <Step title="Narrow while iterating">
+    Keep a tight date window and a small `LIMIT` until the shape is right. The 5-second timeout is real.
+  </Step>
+  <Step title="Validate a few rows by hand">
+    Pick two or three wallets from the result and confirm they genuinely belong in the cohort.
+  </Step>
+  <Step title="Save as a report or segment">
+    Saving as a segment requires a wallet column in your output — `wallet_address`, `wallet`, or `address`. Without one, saving fails.
+  </Step>
+  <Step title="Use it downstream">
+    Feed the segment into a campaign or an automation.
+  </Step>
+</Steps>
+
+## Costs and caching
+
+Running SQL is **free** — hand-written and saved queries never consume AI credits. Credits apply only when you [generate SQL from a prompt](/intelligence/generate-sql).
+
+Identical queries re-run within 10 minutes return cached results without re-executing.
+
+## Joining safely
+
+Wallet casing is not normalized across tables. Always join with `lower()` on both sides:
+
+```sql
+SELECT c.email, m.portfolio_value_usd
+FROM contacts c
+JOIN user_onchain_metrics m
+  ON lower(m.wallet_address) = lower(c.wallet_address)
+LIMIT 100
+```
+
+Two more traps worth knowing before you write a join:
+
+- `delivery_events` has **no `campaign_id` column**. Attribute events to a campaign via `metadata->>'campaignId'`. The `campaign_run_id` column identifies a send run, not a campaign.
+- `wallet_activity_summary` is per wallet **per chain**, and `nft_holdings` is per token. Joining either to a per-wallet table multiplies rows — aggregate or filter on `chain` first.
 
 ## Guardrails
 
-Treat SQL outputs as draft audience definitions until reviewed. Safe, readable, narrow queries are easier for the full team to trust and reuse.
+Treat SQL output as a draft audience until someone has reviewed it. Narrow, readable queries are easier for the whole team to trust and reuse — and much easier to debug when a campaign reaches the wrong people.

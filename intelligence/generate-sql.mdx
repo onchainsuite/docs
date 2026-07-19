@@ -1,34 +1,79 @@
 ---
 title: "Generate SQL"
-description: "Turn a plain-language audience idea into a draft SQL query you can review and refine."
+description: "Turn a plain-language audience idea into a draft SQL query you can review, refine, and save."
 ---
 
-## Best Use Cases
+Describe the cohort you want and get back a draft query against the [curated schema](/api/sql-schema). Useful when you know the audience but don't want to start from an empty editor.
 
-Generate SQL is useful when a marketer knows the cohort they want but does not want to start from a blank query editor.
+## Modes and credit cost
 
-## Good Prompt Inputs
+| Mode | Credits | Use it for |
+| --- | --- | --- |
+| `fast` | 1 | Simple single-table filters |
+| `best` | 5 | Multi-table joins and derived logic — the default |
 
-The strongest prompts usually include:
+Repeating the same prompt within 6 hours returns the cached result and costs **nothing**. Running the resulting SQL is always free; only generation consumes credits.
 
-- The protocol, brand, or collection name
-- The chain or contract focus when relevant
-- The business goal, such as win-back, VIP targeting, or lifecycle follow-up
-- The audience behavior you want to isolate
+If your workspace runs out of credits, generation returns `402 AI_CREDITS_EXCEEDED` while the editor itself keeps working — you can still write and run SQL by hand.
 
-## Example Prompts
+## Writing a good prompt
 
-- Find recent minters on Base who have not clicked a campaign in the last 30 days.
-- Show high-value wallets with declining activity that should enter a churn win-back flow.
-- Build a report of users who clicked a governance reminder but did not vote.
+The strongest prompts name four things:
 
-## Review Checklist
+- The **behavior** to isolate — minted, swapped, clicked, went quiet
+- The **time window** — "in the last 30 days"
+- The **chain or contract**, when relevant
+- The **business goal** — win-back, VIP targeting, governance reminder
 
-- Does the query match the intended lifecycle question?
-- Are joins likely to duplicate rows?
-- Is the output shaped for a report or a segment?
-- Is the date window explicit enough to review confidently?
+<CodeGroup>
+```text Vague
+find inactive users
+```
 
-## Recommendation
+```text Specific
+Find contacts on Base with portfolio value over $5,000 whose last
+onchain activity was more than 30 days ago and who opened an email
+in the last 90 days. I want a win-back audience.
+```
+</CodeGroup>
 
-Treat generated SQL as a first draft. Review it, test it on a limited window, then save the final version for your team.
+The second prompt names the chain, the threshold, both time windows, and the goal — so the generated query needs far less editing.
+
+### More examples
+
+- Recent minters on Base who haven't clicked a campaign in the last 30 days.
+- High-value wallets with declining activity that should enter a churn win-back flow.
+- Contacts who clicked a governance reminder but have no `VoteCast` activity.
+- Holders of more than three NFTs from one collection who have never received an email.
+
+## Reviewing the result
+
+Generated SQL is always re-validated against the schema before it reaches you, so it can't contain unsupported tables or write operations. What validation **cannot** check is whether the query answers your actual question.
+
+<AccordionGroup>
+  <Accordion title="Does it answer the question you asked?" icon="circle-question">
+    The most common failure isn't invalid SQL — it's a valid query for a subtly different question. Read the `WHERE` clause against your original intent, line by line.
+  </Accordion>
+
+  <Accordion title="Will the joins duplicate rows?" icon="copy">
+    `wallet_activity_summary` is per wallet per chain; `nft_holdings` is per token. Joining either to a per-wallet table fans out rows. If a wallet appears twice, that's why — add a `chain` filter or aggregate.
+  </Accordion>
+
+  <Accordion title="Are wallet joins case-safe?" icon="text-size">
+    Wallet casing isn't normalized. Joins should use `lower()` on both sides or they'll silently drop rows.
+  </Accordion>
+
+  <Accordion title="Is the date window explicit?" icon="calendar">
+    An unbounded query over all history usually isn't what you meant, and is far more likely to hit the 5-second timeout.
+  </Accordion>
+
+  <Accordion title="Is the output shaped for its destination?" icon="table">
+    Saving as a segment requires a wallet column — `wallet_address`, `wallet`, or `address`. Reports are free-form.
+  </Accordion>
+</AccordionGroup>
+
+## After generating
+
+Run it on a narrow window first, spot-check a few rows against wallets you recognize, then save. Once saved, the query re-runs for free — so the credit cost is one-time, not per use.
+
+Treat generated SQL as a first draft from someone who knows the schema but not your business.

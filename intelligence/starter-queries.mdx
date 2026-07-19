@@ -1,19 +1,165 @@
 ---
 title: "Starter Queries"
-description: "Use starter queries to get to a useful audience or report faster."
+description: "Six ready-to-run queries covering enrichment, engagement, value scoring, and retention."
 ---
 
-## Useful Starting Points
+Starter queries are proven patterns you can run as-is or adapt. Each one is valid against the [curated schema](/api/sql-schema) and returns within the limits, so they're a safer starting point than a blank editor.
 
-- Recently active wallets
-- Dormant holders
-- Recent minters with no follow-up action
-- High-value users with low recent engagement
-- Users who clicked but did not convert
+## Wallet enrichment
 
-## Workflow
+### Top enriched wallets
 
-1. Pick the closest starter query.
-2. Adjust the filters.
-3. Validate the results.
-4. Save the query as a report or segment.
+Your richest wallets by portfolio value, volume, and NFT breadth.
+
+```sql
+SELECT
+  wallet_address,
+  primary_chain,
+  portfolio_value_usd,
+  volume_last_90d,
+  nft_collection_count,
+  engagement_score,
+  est_ltv
+FROM user_onchain_metrics
+WHERE portfolio_value_usd IS NOT NULL
+ORDER BY portfolio_value_usd DESC, volume_last_90d DESC
+LIMIT 50
+```
+
+## Engagement
+
+### Most active wallets
+
+On-chain activity joined to contact records, over the last 90 days.
+
+```sql
+SELECT
+  c.email,
+  c.wallet_address,
+  uom.engagement_score,
+  was.chain,
+  was.transaction_count,
+  was.active_days_30d,
+  was.active_days_90d,
+  was.last_activity_at
+FROM contacts c
+JOIN user_onchain_metrics uom
+  ON uom.wallet_address = c.wallet_address
+JOIN wallet_activity_summary was
+  ON was.wallet_address = c.wallet_address
+WHERE c.wallet_address IS NOT NULL
+ORDER BY uom.engagement_score DESC, was.active_days_30d DESC
+LIMIT 100
+```
+
+<Note>
+This query returns one row per wallet **per chain**, because `wallet_activity_summary` is chain-scoped. Add `AND was.chain = 'base-mainnet'` to pin it to a single chain, or aggregate if you want one row per wallet.
+
+If wallets seem to be missing, wrap both sides of the joins in `lower()` — casing isn't normalized on `contacts`.
+</Note>
+
+## Volume scoring
+
+### High-value volume scoring
+
+Rank wallets by 90-day volume, estimated LTV, and recent activity for targeting.
+
+```sql
+SELECT
+  wallet_address,
+  volume_last_90d,
+  transaction_count_90d,
+  est_ltv,
+  portfolio_value_usd,
+  engagement_score,
+  last_enriched_at
+FROM user_onchain_metrics
+WHERE volume_last_90d > 0
+ORDER BY est_ltv DESC, volume_last_90d DESC, engagement_score DESC
+LIMIT 75
+```
+
+## Retention
+
+These three run against `contact_360`, which already joins identity, on-chain metrics, activity, and email engagement.
+
+### Churn-risk whales
+
+High-value contacts going quiet on-chain but still email-reachable — prime win-back targets.
+
+```sql
+SELECT
+  email,
+  wallet_address,
+  portfolio_value_usd,
+  est_ltv,
+  days_since_last_activity,
+  email_opens,
+  churn_risk
+FROM contact_360
+WHERE churn_risk IN ('high', 'medium')
+  AND NOT suppressed
+  AND portfolio_value_usd > 0
+ORDER BY est_ltv DESC NULLS LAST, portfolio_value_usd DESC NULLS LAST
+LIMIT 100
+```
+
+### Engaged readers, inactive on-chain
+
+They open your emails but have stopped transacting. Good candidates for an incentive.
+
+```sql
+SELECT
+  email,
+  wallet_address,
+  email_opens,
+  email_clicks,
+  days_since_last_activity,
+  primary_chain
+FROM contact_360
+WHERE email_opens > 0
+  AND NOT suppressed
+  AND (last_activity_at IS NULL OR days_since_last_activity > 30)
+ORDER BY email_clicks DESC, email_opens DESC
+LIMIT 100
+```
+
+### Healthy VIPs
+
+Your best customers right now — high LTV, active on-chain, engaging with email. Reward and retain.
+
+```sql
+SELECT
+  email,
+  wallet_address,
+  est_ltv,
+  portfolio_value_usd,
+  engagement_score,
+  email_clicks,
+  churn_risk
+FROM contact_360
+WHERE churn_risk = 'low'
+  AND NOT suppressed
+  AND est_ltv > 0
+ORDER BY est_ltv DESC, engagement_score DESC
+LIMIT 100
+```
+
+## Adapting them
+
+<Steps>
+  <Step title="Pick the closest starting point">
+    Match on the question shape, not the exact columns — columns are easy to swap.
+  </Step>
+  <Step title="Tighten the filters">
+    Adjust the thresholds (`portfolio_value_usd`, `days_since_last_activity`) to your audience. The defaults are deliberately broad.
+  </Step>
+  <Step title="Validate a few rows">
+    Spot-check wallets you recognize before trusting the whole result.
+  </Step>
+  <Step title="Save as a report or segment">
+    Segments need a wallet column in the output — every retention query above already has one.
+  </Step>
+</Steps>
+
+Remember that `churn_risk` is derived from activity recency: `low` within 30 days, `medium` at 30–60 days, `high` beyond 60, plus `unknown` for wallets with no recorded activity and `suppressed` for suppressed contacts.

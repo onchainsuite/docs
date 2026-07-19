@@ -1,140 +1,301 @@
 ---
 title: In-App Notifications (Wallet-Based)
-description: Wallet-authenticated in-app push notifications via publishable keys, signed challenges, and real-time Socket.IO delivery.
+description: Deliver real-time, wallet-targeted push notifications to your dApp using publishable keys, signed challenges, and Socket.IO.
 ---
 
-## Overview
+Deliver real-time notifications to your users addressed by **wallet address** — no email, no phone number, no account system required. A user proves ownership of their wallet by signing a message, and from then on you can push notifications straight into your dApp.
 
-The in-app system lets you deliver real-time, wallet-targeted notifications to your users without requiring email or phone numbers.
+<CardGroup cols={2}>
+  <Card title="Drop-in SDK" icon="bolt">
+    Two lines of JavaScript gives you wallet auth, a live socket, and a styled toast UI.
+  </Card>
+  <Card title="Server-to-server API" icon="server">
+    Send pushes from your backend with a secret key when you need full control.
+  </Card>
+</CardGroup>
 
-It consists of:
+## How it works
 
-- A dashboard configuration surface to manage allowed browser origins and publishable keys.
-- A public two-step wallet authentication flow (challenge → verify) using a publishable key (`pk_*`).
-- A Socket.IO gateway that streams pushes to connected clients and replays pending pushes on reconnect.
-- A server-to-server API to send pushes using a secret key (`sk_*`).
+<Steps>
+  <Step title="Allow your origin">
+    Register your frontend's origin in the dashboard. Requests from anywhere else are rejected.
+  </Step>
+  <Step title="Wallet authenticates">
+    The browser requests a challenge with your **publishable key**, the wallet signs it, and the server returns a short-lived session token.
+  </Step>
+  <Step title="Client connects">
+    The client opens a Socket.IO connection with that token and joins a room scoped to its org + wallet.
+  </Step>
+  <Step title="You send pushes">
+    From your backend (secret key), a campaign, or an automation. Anything sent while the user is offline is replayed on reconnect.
+  </Step>
+</Steps>
 
-## Concepts
+## Keys and environments
 
-### Keys
+| Key | Where it lives | What it does |
+| --- | --- | --- |
+| `pk_live_*` / `pk_test_*` | Browser — safe to ship publicly | Challenge/verify wallet auth only |
+| `sk_live_*` / `sk_test_*` | Server only — never in client code | Send pushes programmatically |
 
-- **Publishable key (`pk_*`)**: safe to use in the browser. Used only for the challenge/verify flow.
-- **Secret key (`sk_*`)**: server-to-server only. Used to send pushes programmatically.
+Your publishable key's environment decides which allowed origins apply:
 
-### Allowed origins
+- `pk_live_*` matches origins registered as **`production`**
+- `pk_test_*` matches origins registered as **`development`**
 
-The in-app runtime requires an `Origin` match against your allowed origin list.
+<Warning>
+The origins API also accepts `staging`, but no publishable key ever resolves to it. An origin registered as `staging` will never match any key — use `production` or `development`.
+</Warning>
 
-- `pk_live_*` keys map to **production** origin entries.
-- `pk_test_*` keys map to **development** origin entries.
+<Note>
+The in-app allowlist is separate from the API's CORS allowlist. Your origin must be present in **both** for browser requests to succeed. If you get a CORS error in the console rather than an `Origin not allowed` response body, it's the CORS allowlist that's missing your domain.
+</Note>
 
-## Dashboard setup (Integrations)
+## Quickstart with the SDK
 
-These endpoints are intended for your internal dashboard UI (cookie session auth + org role).
+The fastest path is the official browser SDK — it handles the challenge/verify handshake, the socket lifecycle, reconnection, delivery reporting, and an optional toast UI.
 
-### 1) Check in-app integration status
+<CodeGroup>
+```bash npm
+npm i @onchainsuite/sdk socket.io-client
+```
 
-`GET /integrations/inapp/status`
+```html CDN
+<script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
+<script type="module">
+  import { OnchainSuite } from "https://esm.sh/@onchainsuite/sdk";
 
-Returns:
+  const os = new OnchainSuite("pk_live_yourorg_xxx", {
+    apiBaseUrl: "https://api.onchainsuite.com",
+  });
+  await os.start();
+</script>
+```
+</CodeGroup>
 
-- publishable keys
-- available secret keys
-- currently connected SDK sessions
-- daily usage limit and usage
-- allowed origin count
+`socket.io-client` is an optional peer dependency. The SDK finds it via `window.io`, a dynamic import, or an explicit `ioClient` option.
 
-### 2) Allow your frontend origin
+### Simplest integration
 
-`POST /integrations/inapp/origins`
+```ts
+import { OnchainSuite } from "@onchainsuite/sdk";
 
-Body:
+const os = new OnchainSuite("pk_live_yourorg_xxx", {
+  apiBaseUrl: "https://api.onchainsuite.com",
+});
+
+await os.start(); // prompts window.ethereum to connect + sign
+```
+
+That's the whole integration. `start()` discovers the connected wallet via `eth_requestAccounts`, runs the signature handshake, connects the socket, and begins rendering notifications.
+
+### Bring your own signer (wagmi / viem / ethers)
+
+If your app already manages wallet connection, pass a signer and the address explicitly so the user isn't prompted twice.
+
+```ts
+const os = new OnchainSuite("pk_live_yourorg_xxx", {
+  apiBaseUrl: "https://api.onchainsuite.com",
+  signMessage: async (message) => signMessageAsync({ message }),
+});
+
+await os.start(walletAddress);
+```
+
+### React
+
+```tsx
+import { useEffect } from "react";
+import { OnchainSuite } from "@onchainsuite/sdk";
+
+useEffect(() => {
+  if (!address) return;
+
+  const os = new OnchainSuite("pk_live_yourorg_xxx", {
+    apiBaseUrl: "https://api.onchainsuite.com",
+    signMessage: async (message) => signMessageAsync({ message }),
+  });
+
+  os.start(address);
+  return () => os.stop(); // always clean up on unmount / disconnect
+}, [address]);
+```
+
+### Custom rendering
+
+Return `false` from `onNotification` to suppress the built-in toast while keeping delivery analytics intact — then render the notification however you like.
+
+```ts
+const os = new OnchainSuite("pk_live_yourorg_xxx", {
+  apiBaseUrl: "https://api.onchainsuite.com",
+  display: false, // disable built-in UI entirely
+  onNotification: (n) => {
+    myToastLibrary.show({ title: n.title, body: n.body, href: n.cta?.url });
+    return false;
+  },
+});
+
+os.on("connected", () => console.log("live"));
+os.on("error", (e) => console.warn(e));
+
+await os.start();
+```
+
+Report interactions yourself when you render your own UI, so click and view analytics stay accurate:
+
+```ts
+os.report(notification, "clicked");
+```
+
+### SDK reference
+
+<ParamField path="publishableKey" type="string" required>
+  Must start with `pk_`. The constructor throws otherwise.
+</ParamField>
+
+<ParamField path="options.apiBaseUrl" type="string">
+  API origin **without** the `/api/v1` suffix — e.g. `https://api.onchainsuite.com`.
+</ParamField>
+
+<ParamField path="options.signMessage" type="(message: string) => Promise<string>">
+  Custom signer. Defaults to `personal_sign` via `window.ethereum`.
+</ParamField>
+
+<ParamField path="options.provider" type="EIP1193Provider">
+  Explicit wallet provider instead of `window.ethereum`.
+</ParamField>
+
+<ParamField path="options.display" type="DisplayOptions | false">
+  Toast configuration, or `false` to disable the built-in UI.
+</ParamField>
+
+<ParamField path="options.onNotification" type="(n) => boolean | void">
+  Called per notification. Return `false` to suppress the built-in toast.
+</ParamField>
+
+<ParamField path="options.debug" type="boolean">
+  Verbose console logging.
+</ParamField>
+
+**Display defaults:** `position: "bottom-right"`, `accent: "#6d5efc"`, `background: "#111318"`, `foreground: "#f5f6f8"`, `duration: 8000` (use `0` for sticky), `maxVisible: 3`, `zIndex: 2147483000`.
+
+**Methods:** `start(walletAddress?)`, `stop()`, `on(event, cb)` returning an unsubscribe function, and `report(notification, type)`.
+
+**Events:** `"notification"`, `"connected"`, `"disconnected"`, `"error"`.
+
+Behaviour worth knowing: `delivered` is reported automatically on receipt; the socket reconnects indefinitely with backoff from 1s to 15s; toast content is rendered with `textContent`, so notification text can't inject HTML; and `start()` resolves after 8 seconds even if the socket hasn't connected yet, so it never hangs your boot sequence.
+
+## Dashboard setup
+
+These endpoints back your own dashboard UI and use a cookie session plus an org role. Base path: `https://api.onchainsuite.com/api/v1`.
+
+<AccordionGroup>
+  <Accordion title="GET /integrations/inapp/status" icon="circle-info">
+    Requires `OWNER` or `ADMIN`. Returns publishable keys, secret key metadata, live session count, daily usage, and origin count.
+
+    ```json
+    {
+      "active": true,
+      "protocolId": "<organizationId>",
+      "publishableKeys": { "production": "pk_live_…", "test": "pk_test_…" },
+      "secretKeys": [
+        { "id": "…", "environment": "live", "name": "backend", "createdAt": "…",
+          "lastUsedAt": "…", "revokedAt": null, "prefix": "sk_live_…" }
+      ],
+      "activeSessions": 12,
+      "dailyUsage": { "used": 431, "limit": 50000, "percentage": 0.86, "resetsAt": "…" },
+      "allowedOriginsCount": 2
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="GET /integrations/inapp/origins" icon="list">
+    Requires `OWNER` or `ADMIN`.
+
+    ```json
+    [
+      { "id": "…", "origin": "https://app.example.com",
+        "environment": "production", "createdAt": "…" }
+    ]
+    ```
+  </Accordion>
+
+  <Accordion title="POST /integrations/inapp/origins" icon="plus">
+    Requires `OWNER` or `ADMIN`. Both fields required; `environment` must be `production`, `staging`, or `development`.
+
+    ```json
+    { "origin": "https://app.example.com", "environment": "production" }
+    ```
+
+    The origin is normalized to scheme + host + port — any path is stripped. Registering the same origin twice in one environment returns `400 Origin already exists for this environment`.
+  </Accordion>
+
+  <Accordion title="DELETE /integrations/inapp/origins/{originId}" icon="trash">
+    Requires `OWNER` or `ADMIN`. Returns `{ "deleted": true }`.
+  </Accordion>
+
+  <Accordion title="POST /integrations/inapp/test-push" icon="paper-plane">
+    Requires `OWNER`, `ADMIN`, or `EDITOR`. `walletAddress`, `title`, and `body` are required; `ctaLabel` and `ctaUrl` optional.
+
+    Test pushes don't count against your plan's message allowance, but they **do** count toward the daily in-app quota.
+  </Accordion>
+</AccordionGroup>
+
+## Response format
+
+Every successful response is wrapped in a standard envelope. The examples below show the contents of `data`.
 
 ```json
 {
-  "origin": "https://app.example.com",
-  "environment": "production"
+  "success": true,
+  "message": "Request processed successfully",
+  "data": { },
+  "timestamp": "2026-07-19T12:00:00.000Z",
+  "requestId": "…"
 }
 ```
 
-### 3) Send a test push (optional)
-
-`POST /integrations/inapp/test-push`
-
-Body:
+Errors use a parallel shape:
 
 ```json
 {
-  "walletAddress": "0xabc...",
-  "title": "Test notification",
-  "body": "Your in-app integration is working.",
-  "ctaLabel": "Open",
-  "ctaUrl": "https://app.example.com"
+  "success": false,
+  "error": { "code": "UNAUTHORIZED", "message": "Origin not allowed", "details": {} },
+  "meta": { "timestamp": "…", "path": "/api/v1/inapp/challenge", "requestId": "…" }
 }
 ```
 
-## Browser SDK auth flow (challenge → verify)
+Error codes by status: `400 BAD_REQUEST`, `401 UNAUTHORIZED`, `403 FORBIDDEN`, `404 NOT_FOUND`, `409 CONFLICT`, `422 VALIDATION_ERROR`, `429 RATE_LIMITED`, `500 INTERNAL_ERROR`.
 
-The browser flow uses a publishable key (`pk_*`) plus an origin allowlist check.
+## Manual browser integration
 
-### Step 1 — Request a challenge message
+Use this if you're not on JavaScript or need to control the handshake yourself. Otherwise prefer the SDK above.
 
-`POST /inapp/challenge`
+### Step 1 — Request a challenge
 
-Headers:
+`POST /api/v1/inapp/challenge`
 
-- `x-publishable-key: pk_live_...` (or `Authorization: Bearer pk_live_...`)
-- `Origin: https://app.example.com`
+Send `x-publishable-key: pk_live_…` (or `Authorization: Bearer pk_live_…`) and an `Origin` header matching an allowed origin.
 
-Body:
+```json
+{ "walletAddress": "0xabc..." }
+```
+
+`data`:
 
 ```json
 {
-  "walletAddress": "0xabc..."
+  "nonceId": "f3c1…",
+  "message": "OnchainSuite In-App Push\n\nWallet: 0xabc…\nNonce: …\nIssued At: …\nExpires At: …",
+  "expiresAt": "2026-07-19T12:05:00.000Z"
 }
 ```
 
-Response:
-
-```json
-{
-  "nonceId": "f3c1...",
-  "message": "OnchainSuite In-App Push\n\nWallet: 0xabc...\nNonce: ...\nIssued At: ...\nExpires At: ...",
-  "expiresAt": "2026-06-22T00:00:00.000Z"
-}
-```
+The challenge is valid for **5 minutes**.
 
 ### Step 2 — Sign and verify
 
-The wallet must sign the returned `message` (EIP-191 `signMessage`) and send it to `/inapp/verify`.
-
-`POST /inapp/verify`
-
-Headers:
-
-- `x-publishable-key: pk_live_...` (or `Authorization: Bearer pk_live_...`)
-- `Origin: https://app.example.com`
-
-Body:
-
-```json
-{
-  "walletAddress": "0xabc...",
-  "signature": "0x..."
-}
-```
-
-Response:
-
-```json
-{
-  "token": "<inapp-session-jwt>",
-  "wsUrl": "https://api.onchainsuite.com/api/v1/inapp/register",
-  "expiresAt": "2026-06-29T00:00:00.000Z"
-}
-```
-
-### Example: signing with ethers
+Sign the returned `message` with EIP-191 `personal_sign`:
 
 ```ts
 import { BrowserProvider } from "ethers";
@@ -144,21 +305,31 @@ const signer = await provider.getSigner();
 const signature = await signer.signMessage(message);
 ```
 
-## Real-time delivery via Socket.IO
+`POST /api/v1/inapp/verify` with the same headers:
 
-After verification, connect a Socket.IO client to the `wsUrl` returned by `/inapp/verify`.
+```json
+{ "walletAddress": "0xabc...", "signature": "0x..." }
+```
 
-Socket.IO path:
+`data`:
 
-- `/api/v1/inapp/register`
+```json
+{
+  "token": "<session-jwt>",
+  "wsUrl": "https://api.onchainsuite.com/api/v1/inapp/register",
+  "expiresAt": "2026-07-26T12:00:00.000Z"
+}
+```
 
-Auth options supported by the server:
+<Note>
+`wsUrl` is built from the incoming request's host, so always use the returned value rather than hardcoding it.
+</Note>
 
-- `handshake.auth.token = <session jwt>`
-- or `Authorization: Bearer <session jwt>`
-- or query param `?t=<session jwt>`
+Both `/inapp/challenge` and `/inapp/verify` are rate limited to **3 requests per 10 seconds**.
 
-### Example: connect and listen for pushes
+### Step 3 — Connect the socket
+
+Connect Socket.IO at path `/api/v1/inapp/register`. The token can go in `handshake.auth.token`, an `Authorization: Bearer` header, or a `?t=` query param.
 
 ```ts
 import { io } from "socket.io-client";
@@ -170,12 +341,13 @@ const socket = io("https://api.onchainsuite.com", {
 });
 
 socket.on("connect", () => {
-  socket.emit("REGISTER", { walletAddress });
+  socket.emit("REGISTER", { walletAddress }, (ack) => {
+    console.log(`connected, ${ack.pendingCount} pending`);
+  });
 });
 
 socket.on("PUSH", (push) => {
-  // push shape includes: deliveryId, campaignRunId, title, body, cta?, createdAt, expiresAt
-  console.log("Push received", push);
+  renderNotification(push);
   socket.emit("EVENT", {
     campaignRunId: push.campaignRunId,
     deliveryId: push.deliveryId,
@@ -184,81 +356,182 @@ socket.on("PUSH", (push) => {
 });
 ```
 
-### Client events
+Pending notifications are replayed automatically on connect, before any live pushes arrive.
 
-- `REGISTER` (optional but recommended): confirms the wallet for the connection
-- `EVENT`: records interaction events (`delivered`, `viewed`, `dismissed`, `clicked`)
+#### Socket events
 
-The server will disconnect the socket if the client tries to report events for a wallet other than the one in the session token.
+**Server → client** — `PUSH`:
 
-## Sending pushes (server-to-server)
-
-Use this when you want maximum control from your own backend (or an external relay).
-
-`POST /inapp/push`
-
-Auth:
-
-- `Authorization: Bearer sk_...` (or `x-secret-key: sk_...`)
-
-Body:
-
-```json
+```ts
 {
-  "walletAddress": "0xabc...",
-  "title": "You received tokens",
-  "body": "A transfer just hit your wallet.",
-  "ctaLabel": "View transaction",
-  "ctaUrl": "https://app.example.com/tx/0x...",
-  "automationId": "goldrush_transfer_alert"
+  deliveryId: string;
+  campaignRunId: string;
+  walletAddress: string;
+  title: string;
+  body: string;
+  cta?: { label: string; url: string };
+  createdAt: string;
+  expiresAt: string;
+  deliveredAt?: string;  // present on replay
+  viewedAt?: string;
 }
 ```
 
-Response:
+**Client → server:**
+
+| Event | Payload | Ack |
+| --- | --- | --- |
+| `REGISTER` | `{ walletAddress }` | `{ ok: true, pendingCount }` |
+| `EVENT` | `{ campaignRunId, deliveryId, type, walletAddress?, metadata? }` | `{ ok: true }` |
+
+`type` is one of `delivered`, `viewed`, `dismissed`, or `clicked`. Optional `metadata` is stored on the delivery record.
+
+<Warning>
+Reporting events for a wallet other than the one in your session token disconnects the socket immediately. There is no error event — it surfaces client-side as `disconnect` or `connect_error`.
+</Warning>
+
+## Sending pushes from your backend
+
+`POST /api/v1/inapp/push` with `Authorization: Bearer sk_…` (or `x-secret-key: sk_…`). The organization is derived from the key.
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/inapp/push \
+  -H "Authorization: Bearer sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "walletAddress": "0xabc...",
+    "title": "You received tokens",
+    "body": "A transfer just hit your wallet.",
+    "ctaLabel": "View transaction",
+    "ctaUrl": "https://app.example.com/tx/0x...",
+    "automationId": "transfer_alert"
+  }'
+```
+
+<ParamField path="walletAddress" type="string" required>
+  Recipient wallet.
+</ParamField>
+
+<ParamField path="title" type="string">
+  Required unless supplied by `templateId`.
+</ParamField>
+
+<ParamField path="body" type="string">
+  Required unless supplied by `templateId`.
+</ParamField>
+
+<ParamField path="templateId" type="string">
+  An in-app template to render. Its `content.channel` must be `"inapp"`.
+</ParamField>
+
+<ParamField path="variables" type="Record<string, string>">
+  Merge values for `{{ token }}` placeholders. Max 50 entries.
+</ParamField>
+
+<ParamField path="ctaLabel" type="string">
+  Button label. Only renders when `ctaUrl` is also present.
+</ParamField>
+
+<ParamField path="ctaUrl" type="string">
+  Button destination.
+</ParamField>
+
+<ParamField path="automationId" type="string">
+  Free-form tag for attribution. Defaults to `inapp_api`.
+</ParamField>
+
+`data`:
 
 ```json
 {
   "ok": true,
-  "campaignRunId": "cr_...",
-  "deliveryId": "d_...",
+  "campaignRunId": "…",
+  "deliveryId": "…",
   "deliveredNow": true,
-  "expiresAt": "2026-06-25T00:00:00.000Z"
+  "expiresAt": "2026-07-22T12:00:00.000Z"
 }
 ```
 
-## Automations integration (sending in-app from workflows)
+<Warning>
+`deliveredNow` is a best-effort signal meaning "a socket for this wallet is connected to the node that handled your request." A `false` does **not** mean the push failed — the user may be connected to another node, and offline users get the push replayed on reconnect. For authoritative delivery, read the `delivered` event in your analytics.
+</Warning>
 
-Automations can send in-app pushes to one or many wallets. Internally the system:
+### Templates and merge variables
 
-- creates a `CampaignRun` for tracking
-- writes a `DeliveryEvent` row for analytics (`sent`, plus interaction events)
-- stores a short-lived pending list per wallet in cache (replayed on reconnect)
+When you send `templateId`, these variables are always available without you supplying them:
 
-If multiple wallets are targeted by one automation step, pushes are deduplicated and sent as a bulk operation.
+| Variable | Value |
+| --- | --- |
+| `wallet`, `wallet_address`, `walletAddress` | Full recipient address |
+| `wallet_short` | Truncated form, e.g. `0xabcd…1234` |
 
-## Limits, TTLs, and environment variables
+Unknown placeholders are left in the text as-is rather than blanked, which makes typos visible during testing.
 
-### Push TTL
+### Sending to many wallets
 
-- Pushes expire after `ttlHours` (clamped to 1..72 hours, default 72).
-- Expired/dismissed/clicked pushes are pruned and won’t be replayed.
-- Per-wallet pending list is capped to the **10 most recent** pushes.
+There is no bulk endpoint on the secret-key API — loop `/inapp/push` per wallet. For audience-scale sends, use one of these instead:
 
-### Daily quota
+- **Campaign to a segment** — `POST /api/v1/campaigns/{id}/send-inapp` resolves recipients from the campaign's segment and returns `{ campaignRunId, recipientCount, deliveredNowCount, skippedCount }`. Optional body fields `title`, `body`, `ctaLabel`, `ctaUrl` override the campaign's stored content.
+- **Automations** — add a `send_inapp` step and let the workflow resolve the audience.
 
-- `INAPP_DAILY_LIMIT` (default `50000`) limits pushes per org per UTC day (429 if exceeded).
+To preview reach before sending, query your segment with `?reachable_on=inapp`.
 
-### Session token TTL and secrets
+## Limits and quotas
 
-- `INAPP_SESSION_SECRET` must be set (fallbacks: `JWT_ACCESS_SECRET`, `BETTER_AUTH_SECRET`)
-- `INAPP_SESSION_TTL_SECONDS` controls session expiry (clamped to 10 minutes..30 days; default 7 days)
+| Limit | Value |
+| --- | --- |
+| Push TTL | 72 hours |
+| Pending notifications per wallet | 10 most recent |
+| Challenge TTL | 5 minutes |
+| Session token TTL | 7 days (configurable, 10 minutes to 30 days) |
+| Challenge/verify rate limit | 3 requests per 10 seconds |
+| Daily pushes per organization | 50,000 (UTC day) |
+
+Expired, dismissed, and clicked notifications are pruned and never replayed.
+
+In-app pushes draw from the **same monthly message allowance as email** — they are not a separate meter. Exceeding it returns `402 PLAN_LIMIT_EXCEEDED`; warnings fire at 75% and 95% of the allowance. Exceeding the daily cap returns `429 Daily in-app push quota exceeded`.
+
+<Note>
+Rate-limit (429) responses from the throttler return a flat body — `{ statusCode, message, error, retryAfter, limit, remaining, resetAt, path, timestamp }` — rather than the standard error envelope, along with `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers.
+</Note>
 
 ## Troubleshooting
 
-- If `/inapp/challenge` or `/inapp/verify` returns `Origin not allowed`:
-  - confirm the browser’s `Origin` matches the configured allowed origin exactly (scheme + host + port)
-  - confirm you used the correct publishable key (`pk_live_*` vs `pk_test_*`)
-- If pushes are not delivered live:
-  - confirm the client is connected to Socket.IO and listening for `PUSH`
-  - `deliveredNow: false` means the wallet was offline; the push will be replayed on reconnect until it expires
+<AccordionGroup>
+  <Accordion title="401 Origin not allowed" icon="ban">
+    - The `Origin` header must match a registered origin exactly: scheme, host, **and** port.
+    - Confirm the key environment lines up — `pk_live_*` only matches `production` origins, `pk_test_*` only matches `development`.
+    - An origin saved as `staging` never matches anything. Re-register it.
+  </Accordion>
 
+  <Accordion title="401 Invalid publishable key / Missing publishable key" icon="key">
+    Send the key as `x-publishable-key` or `Authorization: Bearer`. Check you haven't shipped a test key to production.
+  </Accordion>
+
+  <Accordion title="401 Signature does not match wallet" icon="signature">
+    Sign the `message` string exactly as returned — no trimming or re-encoding — using EIP-191 `personal_sign`. Also confirm `walletAddress` in the verify call matches the signing account.
+  </Accordion>
+
+  <Accordion title="401 Challenge not found or expired" icon="clock">
+    Challenges live 5 minutes and are single-use. Request a fresh one rather than retrying an old signature.
+  </Accordion>
+
+  <Accordion title="Notifications never arrive" icon="wifi">
+    - Confirm the socket is connected and listening for `PUSH` (not a custom event name).
+    - Check the path is exactly `/api/v1/inapp/register`.
+    - Check the send response — a `402` or `429` means it was never queued.
+    - Remember that `deliveredNow: false` is normal and not an error.
+  </Accordion>
+
+  <Accordion title="Socket disconnects immediately" icon="plug">
+    Almost always a wallet mismatch: the wallet in `REGISTER` or `EVENT` differs from the one in the session token. Re-run the handshake after a wallet switch.
+  </Accordion>
+
+  <Accordion title="CTA button doesn't render" icon="link-slash">
+    Both `ctaLabel` and `ctaUrl` must be present. A label without a URL is dropped silently.
+  </Accordion>
+
+  <Accordion title="Real-time works locally but not in production" icon="server">
+    Multi-instance deployments need `REDIS_URL` set so the Socket.IO Redis adapter can broadcast across nodes. Without it, live delivery only reaches users connected to the same instance — replay on reconnect still works, so the symptom is delayed rather than missing notifications.
+  </Accordion>
+</AccordionGroup>

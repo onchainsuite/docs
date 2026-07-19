@@ -1,30 +1,82 @@
 ---
 title: "Overview"
-description: "Understand how automations connect events, conditions, channels, and campaign handoff."
+description: "How automations connect on-chain and lifecycle events to messaging, waits, branches, and campaign handoff."
 ---
 
-## What Automations Do
+An automation watches for an event, checks conditions, and runs a flow — send an in-app push, wait two hours, send an email, branch on what happened. Instead of exporting a list and sending a batch, you respond the moment a wallet does something.
 
-Automations help teams respond the moment a user reaches an important lifecycle state, instead of waiting for manual exports, dashboards, or campaign batches.
+## Anatomy of an automation
 
-## Typical Use Cases
+Every automation has exactly two parts:
 
-- Welcome users after a first onchain action.
-- Re-engage wallets showing churn risk or inactivity.
-- Trigger governance, migration, or reward reminders.
-- Handoff users into campaign-style follow-up based on segment or product behavior.
+<CardGroup cols={2}>
+  <Card title="A trigger" icon="bolt">
+    One event type plus its matching rules — which chain, which contract, which event names, which payload filters.
+  </Card>
+  <Card title="A flow graph" icon="diagram-project">
+    Nodes and edges. Each node is an action, a wait, or a branch. Execution follows the edges from the trigger node.
+  </Card>
+</CardGroup>
 
-## Plays vs. Blank Canvas
+## What you can build with
 
-Onchain Suite is built around the idea that most teams should start from a proven play, not an empty builder.
+| Triggers | Actions |
+| --- | --- |
+| 10 on-chain event types | `send_email`, `send_inapp` |
+| `segment_entered` | `wait`, `branch` |
+| `email_opened` | `add_tag`, `webhook` |
+| `health_threshold` | `dispatch_campaign` |
 
-A strong play combines:
+See [Triggers and Conditions](/automation/triggers-and-conditions) for the full catalog and [Connect to Campaigns](/automation/connect-to-campaigns) for the messaging actions.
 
-- A pre-wired trigger
-- Suggested conditions and audience logic
-- Reusable copy or message structure
-- A clear business outcome such as activation, retention, or win-back
+## Lifecycle
 
-## How To Think About Automation
+An automation is always in one of four states:
 
-Start with one trigger, one audience rule, and one outcome. Expand the flow only after the first path works reliably.
+| Status | Meaning |
+| --- | --- |
+| `draft` | Being built. Never fires. |
+| `active` | Live and matching events. |
+| `paused` | Retained but not matching. |
+| `archived` | Hidden from the list; doesn't count against your plan limit. |
+
+<Warning>
+Setting the status to `active` is **not** enough to make an automation run. The runtime only executes a **published version** of the flow graph. If you activate without publishing, the automation will match events and create entries, then complete having done nothing.
+
+Always finish with **Publish**. See [Create an Automation](/automation/create-an-automation).
+</Warning>
+
+## Plays vs. blank canvas
+
+Most teams should start from a proven play rather than an empty builder. A play ships with a pre-wired trigger, a working flow, and copy you can edit.
+
+Six built-in plays are available to every workspace:
+
+| Play | Tier | Trigger | Flow |
+| --- | --- | --- | --- |
+| **Mint Welcome** | Starter | First-time holder acquires a token | In-app → email |
+| **In-App Announcement** | Starter | Segment entered | In-app |
+| **Email Announcement** | Starter | Segment entered | Email |
+| **Approval Abandoned Cart** | Advanced | Token approval granted | Wait 30m → email → in-app |
+| **Exchange Outflow Save Flow** | Advanced | Transfer to a labeled exchange | In-app → email |
+| **Liquidation Recovery** | Advanced | Liquidation detected | In-app → wait 2h → email |
+
+Forking a play creates a **draft** automation you own. The four on-chain plays ship with an empty contract address — fill it in before publishing.
+
+<Note>
+**Advanced** plays are gated on workspace readiness: indexed wallet count, days of indexing history, and enabled protocol features. If a play reports `readyToShip: false`, the response lists the setup steps still outstanding.
+</Note>
+
+## Limits
+
+| Limit | Value |
+| --- | --- |
+| Recipients per action node | 250 |
+| Retry attempts per step | 3, with exponential backoff |
+| Automations per workspace | Plan-dependent — 2 on free, 5 on starter, 25 on growth, 100 on pro |
+
+Archived automations don't count toward the limit. Exceeding it returns `402 PLAN_LIMIT_EXCEEDED`.
+
+## How to think about it
+
+Start with one trigger, one audience rule, and one outcome. Verify that path end to end with a real event before adding branches. A narrow automation that fires correctly is worth more than a wide one nobody trusts.

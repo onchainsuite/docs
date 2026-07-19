@@ -1,19 +1,191 @@
 ---
 title: "Triggers and Conditions"
-description: "Use triggers and conditions to control automation entry and branching."
+description: "The full trigger catalog, payload filter operators, and branch conditions that control entry and routing."
 ---
 
-## Common Triggers
+A trigger decides **who enters** an automation. Filters narrow that entry. Branches decide **where they go** once inside. These are three different mechanisms with three different rule sets — this page covers all of them.
 
-- Wallet connected
-- Contract action completed
-- User joined a segment
-- Webhook event received
-- Time-based reminder reached
+## On-chain triggers
 
-## Common Conditions
+Ten on-chain trigger types are available. Nine are presets: they're the generic `onchain_event` trigger with event names and filters pre-filled for a specific business moment.
 
-- User is in the correct segment
-- User has not already received the message
-- Wallet meets a contract or value threshold
-- Required channel is available
+| Type | Fires on | Built-in filter |
+| --- | --- | --- |
+| `onchain_event` | Any event you name | — |
+| `holder_acquired` | `Transfer` | `from == 0x0` (mints only) |
+| `governance_activity` | `ProposalCreated`, `VoteCast` | — |
+| `swap_completed` | `Swap`, `TokenExchange` | — |
+| `liquidity_added` | `Deposit`, `Mint`, `AddLiquidity` | — |
+| `borrow_opened` | `Borrow` | — |
+| `capital_withdrawn` | `Burn`, `RemoveLiquidity`, `Withdraw` | — |
+| `liquidation_detected` | `Liquidate` | — |
+| `approval_intent` | `Approval`, `ApprovalForAll` | — |
+| `exchange_outflow` | `Transfer` | `toCategory == "exchange"` |
+
+Each accepts these fields:
+
+<ParamField path="chain" type="string" required>
+  Chain slug — `eth-mainnet`, `base-mainnet`, `arb-mainnet`, `optimism-mainnet`, `matic-mainnet`, or `solana-mainnet`.
+</ParamField>
+
+<ParamField path="contractAddress" type="string">
+  The contract to watch. Leave empty to match the event on any contract.
+</ParamField>
+
+<ParamField path="event" type="string">
+  Single event name. Defaults to `Transfer` on the generic trigger.
+</ParamField>
+
+<ParamField path="eventNames" type="string[]">
+  Match any of several event names. Presets fill this in for you.
+</ParamField>
+
+<ParamField path="topic0" type="string">
+  Match by EVM event signature hash instead of by name.
+</ParamField>
+
+<ParamField path="programId" type="string">
+  Solana program to watch.
+</ParamField>
+
+<ParamField path="instructionName" type="string">
+  Solana instruction to match.
+</ParamField>
+
+<ParamField path="eventStandard" type="string">
+  Narrow to a standard: `erc20`, `erc721`, `erc1155`, `erc4626`, `governance`, `defi`, `spl-token`, `solana-nft`, `solana-dex`, `anchor`.
+</ParamField>
+
+<ParamField path="filters" type="Filter[]">
+  Payload conditions — see below.
+</ParamField>
+
+Matching is a strict AND across everything you configure. Any field you leave unset is a wildcard, but any field you **do** set must agree with the incoming event or the automation won't fire.
+
+<Warning>
+`topic0` and `programId` are matched strictly. If you configure either one and an incoming event doesn't carry it, the event is rejected rather than falling back to name matching. Set them only when you're sure your event source populates them.
+</Warning>
+
+## Payload filters
+
+Filters test values inside the event payload. Each filter is a `path`, an `operator`, and usually a `value`.
+
+```json
+{
+  "filters": [
+    { "path": "from", "operator": "eq", "value": "0x0000000000000000000000000000000000000000" },
+    { "path": "toCategory", "operator": "exists" }
+  ]
+}
+```
+
+`path` is a dot-path into the payload, so nested values work: `"path": "token.symbol"`.
+
+| Operator | Behaviour |
+| --- | --- |
+| `eq` | Equals |
+| `neq` | Not equal |
+| `in` | Value appears in the supplied array |
+| `contains` | Substring match on strings, membership on arrays |
+| `exists` | Path is present and non-empty (no `value` needed) |
+
+All filters on a trigger must pass. Comparisons are case-insensitive and whitespace-trimmed, so wallet address casing never matters.
+
+<Warning>
+These five operators are the complete set. An unrecognized operator — `gte`, `gt`, `lt` — is **silently dropped**, and the filter simply stops applying. That makes the automation fire more often than you intended rather than erroring, so double-check operator spelling. For numeric thresholds, filter downstream with a `branch` node instead.
+</Warning>
+
+## Lifecycle triggers
+
+Three non-chain triggers are available.
+
+### `segment_entered`
+
+Fires when a contact enters a segment.
+
+<ParamField path="segmentId" type="string" required>
+  The segment to watch.
+</ParamField>
+
+### `email_opened`
+
+Fires when a recipient opens a campaign email.
+
+<ParamField path="campaignId" type="string">
+  Restrict to a single campaign. Omit to match any.
+</ParamField>
+
+### `health_threshold`
+
+Fires when a contact's health score crosses a line.
+
+<ParamField path="direction" type="string">
+  `gte` or `lte`. Defaults to `gte`.
+</ParamField>
+
+<ParamField path="score" type="number">
+  The threshold. Defaults to 50.
+</ParamField>
+
+<Note>
+These three triggers fire when an event is **posted to the ingest API** — the platform does not currently emit them on its own. If you want a segment-entry automation to run, your system needs to call the ingest endpoint when membership changes. See [Contract-Based Flows](/automation/contract-based-flows) for the API.
+</Note>
+
+## Entry rules and deduplication
+
+Each matched event creates one **entry** — one contact moving through the flow. Entries are deduplicated by a key derived from the automation and the event's `sourceEventId`. A duplicate returns `duplicate: true` and does not re-enter.
+
+When you don't supply a `sourceEventId`, one is derived for you:
+
+| Trigger | Derived key |
+| --- | --- |
+| `segment_entered` | `segment:<segmentId>:<contact>` |
+| `onchain_event` | `onchain:<chain>:<txHash>` |
+| `email_opened` | `email_opened:<campaignId>:<delivery>` |
+| `health_threshold` | `health_threshold:<contact>:<score>` |
+
+<Warning>
+Two consequences worth planning around:
+
+- **A contact can enter a `segment_entered` automation only once, ever.** Removing and re-adding them to the segment will not re-trigger it. For repeatable entry, send an explicit `sourceEventId` that varies per occurrence.
+- **On-chain events without a `txHash` are never deduplicated** — the key falls back to random bytes, so retries create duplicate entries. Always send `txHash`.
+</Warning>
+
+## Branch conditions
+
+A `branch` node routes an entry down different paths. Conditions here test the **rolling context** — values accumulated as the entry moves through the flow — not the original event payload.
+
+```json
+{
+  "type": "branch",
+  "data": {
+    "branches": [
+      { "field": "walletAddress", "operator": "exists", "target": "inapp_node" },
+      { "field": "email", "operator": "exists", "target": "email_node" }
+    ],
+    "defaultTarget": "tag_node"
+  }
+}
+```
+
+| Operator | Behaviour |
+| --- | --- |
+| `exists` | Value present and non-empty |
+| `neq` | Not equal |
+| `gte` | Greater than or equal (numeric) |
+| `lte` | Less than or equal (numeric) |
+| `contains` | Substring or array membership |
+| `eq` | Equality — also the default for any unrecognized operator |
+
+Rules are evaluated in order and **the first match wins**. If nothing matches, the entry follows `defaultTarget`, and failing that, the first outgoing edge.
+
+Two differences from trigger filters are easy to trip over:
+
+- Branch fields are **flat keys** on the context — `walletAddress`, `email`, `contactId`, `tags`, `lastEmail`. Dot-paths are not traversed here.
+- `gte` and `lte` work in branches but not in trigger filters; `in` works in trigger filters but not in branches.
+
+The context starts as `{ email, walletAddress, contactId }` and accumulates `lastEmail`, `lastInapp`, `lastWebhook`, `lastCampaignDispatch`, and `tags` as nodes execute.
+
+<Note>
+Publishing requires a branch node to have at least two outgoing edges. Draw the edges in the builder even when you've selected targets by node id, or validation will reject the graph with `INVALID_BRANCH_CONFIG`.
+</Note>

@@ -1,33 +1,279 @@
 ---
 title: "Create an Automation"
-description: "Set up an automation that listens for an event, checks conditions, and sends the right follow-up."
+description: "Build, validate, and publish an automation — in the builder or over the API."
 ---
 
-## Common Automation Patterns
+An automation is a trigger plus a flow graph. This page walks through building one, the node types available, and the publish step that actually makes it live.
 
-Onchain Suite automations are useful for onboarding, lifecycle messaging, milestone alerts, wallet activity follow-up, and contract-triggered outreach.
+## Build it
 
-## Steps
+<Steps>
+  <Step title="Start from a play, or from scratch">
+    Forking a [built-in play](/automation/overview) gives you a working trigger and flow as a draft you own. Starting blank gives you an empty graph.
+  </Step>
+  <Step title="Configure the trigger">
+    Pick the event type and narrow it — chain, contract, event names, payload filters. See [Triggers and Conditions](/automation/triggers-and-conditions).
+  </Step>
+  <Step title="Lay out the flow">
+    Add action, wait, and branch nodes, and connect them with edges. Execution follows edges from the trigger node.
+  </Step>
+  <Step title="Validate">
+    Validation reports blocking errors and non-blocking warnings. Fix the errors.
+  </Step>
+  <Step title="Preview">
+    Preview estimates how many wallets currently match the trigger, with sample profiles. Run this before publishing — a trigger matching zero wallets is the most common cause of a silent automation.
+  </Step>
+  <Step title="Publish">
+    Publishing creates the version the runtime executes. Without it, nothing runs.
+  </Step>
+</Steps>
 
-1. Create a new automation in the target project.
-2. Select the trigger event.
-3. Add filters or conditions to narrow eligibility.
-4. Choose the action, delay, or branch logic.
-5. Connect the automation to an email campaign or message step.
-6. Test with a known user or event payload.
-7. Publish only after the trigger path is verified end to end.
+## Node types
 
-## Example Triggers
+Seven node types are available.
 
-- Wallet connected
-- Contract interaction detected
-- User joined a segment
-- Form completed
-- Custom webhook event received
+| Type | Category | Required config |
+| --- | --- | --- |
+| `send_email` | Messaging | `templateId` |
+| `send_inapp` | Messaging | `title`, `body` |
+| `dispatch_campaign` | Messaging | `campaignId` |
+| `wait` | Flow control | `seconds` |
+| `branch` | Flow control | `branches` |
+| `add_tag` | Audience | `tag` |
+| `webhook` | Integrations | `url` |
 
-## Best Practices
+### Waits
 
-- Start with one clear trigger and one desired outcome.
-- Avoid overlapping automations that target the same users.
-- Use naming that describes trigger plus action.
-- Test edge cases before enabling production traffic.
+The simplest form is `seconds`:
+
+```json
+{ "id": "wait_30m", "type": "wait", "data": { "seconds": 1800 } }
+```
+
+You can also use `minutes`, `hours`, or `days`, or an amount-and-unit pair:
+
+```json
+{ "data": { "amount": 2, "unit": "hours" } }
+```
+
+The unit defaults to **minutes** when omitted, and any delay is clamped to a minimum of one second. A waiting entry is scheduled and resumed later — it doesn't hold a worker open.
+
+### Tags
+
+```json
+{ "id": "tag_minter", "type": "add_tag", "data": { "tag": "minted-2026" } }
+```
+
+A `tags` array is also accepted for applying several at once.
+
+<Note>
+There is no `remove_tag` action. A graph containing one fails validation with `UNSUPPORTED_NODE_TYPE`.
+</Note>
+
+### Outbound webhooks
+
+The `webhook` node posts to your endpoint mid-flow. Method may be `POST` (default), `PUT`, or `PATCH`.
+
+```json
+{
+  "id": "notify_backend",
+  "type": "webhook",
+  "data": {
+    "url": "https://api.example.com/hooks/onchain-suite",
+    "method": "POST",
+    "headers": { "X-Api-Key": "..." },
+    "payload": { "source": "automation" }
+  }
+}
+```
+
+Your endpoint receives:
+
+```json
+{
+  "organizationId": "...",
+  "automationId": "...",
+  "entryId": "...",
+  "context": {
+    "email": "user@example.com",
+    "walletAddress": "0xabc...",
+    "contactId": "...",
+    "lastInapp": { }
+  },
+  "source": "automation"
+}
+```
+
+Any response of 400 or above counts as a failure and is retried — up to 5 attempts with exponential backoff, then dead-lettered. Requests time out after 10 seconds.
+
+<Warning>
+Keys in your `payload` are merged **last**, so a payload key named `organizationId`, `automationId`, `entryId`, or `context` will overwrite the platform's own value. Namespace your custom fields.
+</Warning>
+
+<Note>
+This node sends webhooks **out**. There is no inbound webhook trigger — to start an automation from your own system, call the ingest API described in [Contract-Based Flows](/automation/contract-based-flows).
+</Note>
+
+## The flow graph
+
+The graph is plain JSON: a list of nodes and a list of edges.
+
+```json
+{
+  "nodes": [
+    {
+      "id": "trigger_holder_acquired",
+      "type": "holder_acquired",
+      "position": { "x": 120, "y": 140 },
+      "data": {
+        "chain": "base-mainnet",
+        "contractAddress": "0xYourCollection",
+        "eventNames": ["Transfer"],
+        "filters": [
+          { "path": "from", "operator": "eq", "value": "0x0000000000000000000000000000000000000000" }
+        ]
+      }
+    },
+    {
+      "id": "inapp_welcome",
+      "type": "send_inapp",
+      "position": { "x": 420, "y": 140 },
+      "data": {
+        "title": "Welcome onchain",
+        "body": "Thanks for minting. Here's what to do next.",
+        "recipientMode": "triggering_profile"
+      }
+    },
+    {
+      "id": "wait_1h",
+      "type": "wait",
+      "position": { "x": 720, "y": 140 },
+      "data": { "seconds": 3600 }
+    },
+    {
+      "id": "email_welcome",
+      "type": "send_email",
+      "position": { "x": 1020, "y": 140 },
+      "data": {
+        "templateId": "tpl_welcome",
+        "subject": "Welcome to the community",
+        "recipientMode": "triggering_profile"
+      }
+    }
+  ],
+  "edges": [
+    { "id": "e1", "source": "trigger_holder_acquired", "target": "inapp_welcome" },
+    { "id": "e2", "source": "inapp_welcome", "target": "wait_1h" },
+    { "id": "e3", "source": "wait_1h", "target": "email_welcome" }
+  ]
+}
+```
+
+Edges pointing at nodes that don't exist are dropped silently on save.
+
+## Drafts and validation
+
+The builder keeps a **draft graph** and a **saved graph** separately. Draft saves are unvalidated, so you can leave a node half-configured and come back to it. Saving to the main graph validates first.
+
+Blocking errors you'll encounter:
+
+| Code | Meaning |
+| --- | --- |
+| `EMPTY_FLOW` | No nodes |
+| `MISSING_TRIGGER` | No trigger node |
+| `UNSUPPORTED_NODE_TYPE` | Node type isn't one of the seven |
+| `INVALID_EMAIL_CONFIG` | `send_email` has no template |
+| `INVALID_INAPP_RECIPIENTS` | Wallet-list mode with no wallets |
+| `INVALID_WAIT_CONFIG` | Missing or non-positive duration |
+| `INVALID_BRANCH_CONFIG` | Fewer than two outgoing edges |
+| `INVALID_WEBHOOK_CONFIG` | Missing or malformed URL |
+| `INVALID_TAG_CONFIG` | Empty tag |
+| `INVALID_EDGE` | Edge references a missing node |
+
+`DISCONNECTED_NODES` is a warning, not an error — the graph still publishes, but the orphaned nodes never execute.
+
+## Publish
+
+<Warning>
+**Publishing is what makes an automation run.** The runtime executes the most recent *published version* of the graph. Setting status to `active` without publishing produces an automation that matches events, creates entries, and does nothing — the hardest failure mode to spot, because the automation looks live and entry counts climb.
+
+Publish after every change you want live. Saving the graph is not publishing.
+</Warning>
+
+## Managing automations over the API
+
+Base path `https://api.onchainsuite.com/api/v1`. These use your session plus `x-org-id`; write operations need `OWNER`, `ADMIN`, or `EDITOR`.
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/automations` | List — supports `status`, `search`, `page`, `limit` |
+| `POST` | `/automations` | Create a draft |
+| `GET` | `/automations/{id}` | Fetch one |
+| `PUT` | `/automations/{id}` | Update name, trigger, or graph |
+| `PUT` | `/automations/{id}/status` | Set `draft`, `active`, `paused`, `archived` |
+| `POST` | `/automations/{id}/publish` | Publish the current graph |
+| `POST` | `/automations/{id}/duplicate` | Copy as a new draft |
+| `DELETE` | `/automations/{id}` | Delete |
+| `GET` | `/automations/{id}/builder` | Fetch the graph |
+| `PUT` | `/automations/{id}/builder` | Save and validate the graph |
+| `PUT` | `/automations/{id}/builder/draft` | Save without validating |
+| `POST` | `/automations/{id}/builder/validate` | Validate without saving |
+| `POST` | `/automations/{id}/builder/discard` | Reset draft to last saved |
+| `POST` | `/automations/{id}/preview` | Estimate matching wallets |
+
+Catalog endpoints for building pickers: `/automations/builder/triggers`, `/automations/builder/actions`, `/automations/builder/onchain/catalog`, `/automations/builder/project-contracts`, and `/automations/builder/email-templates`.
+
+### Create and publish
+
+```bash
+# 1. Create a draft
+curl -X POST https://api.onchainsuite.com/api/v1/automations \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{
+    "name": "Mint welcome",
+    "triggerSpec": {
+      "type": "holder_acquired",
+      "chain": "base-mainnet",
+      "contractAddress": "0xYourCollection",
+      "eventNames": ["Transfer"]
+    }
+  }'
+# → { "automationId": "...", "status": "draft" }
+
+# 2. Save the graph (validates)
+curl -X PUT https://api.onchainsuite.com/api/v1/automations/$ID/builder \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "nodes": [...], "edges": [...] }'
+
+# 3. Publish — this is the step that makes it live
+curl -X POST https://api.onchainsuite.com/api/v1/automations/$ID/publish \
+  -H "x-org-id: $ORG_ID"
+# → { "automationId": "...", "status": "active", "warnings": [] }
+```
+
+Passing `"useProjectSettings": true` on create fills a blank `chain` and `contractAddress` from your project's primary chain and first contract.
+
+A validation failure returns:
+
+```json
+{
+  "code": "AUTOMATION_BUILDER_INVALID",
+  "message": "Automation builder graph is invalid",
+  "errors": [{ "code": "INVALID_EMAIL_CONFIG", "message": "..." }],
+  "warnings": []
+}
+```
+
+## Retries and failures
+
+Each step retries up to 3 times with exponential backoff. After the final attempt the entry is marked `failed` and recorded as a dead letter with the error.
+
+Email steps behave differently — they **skip** rather than fail when delivery is impossible: if sending reputation is blocked, or every recipient is suppressed, the node is skipped and the flow continues. Check entry events for `node_skipped` when an email step produces no sends.
+
+## Best practices
+
+- One trigger, one outcome. Add branches only after the primary path is verified.
+- Preview before publishing so you know the trigger matches a non-zero audience.
+- Name automations after trigger plus action — "Mint → welcome series" beats "Automation 3".
+- Avoid overlapping automations targeting the same wallets on the same event.
+- Test with a real event, then check entry events to confirm each node fired.
