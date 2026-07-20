@@ -21,7 +21,7 @@ Also enforced:
 - **No SQL comments** — `--`, `/*`, and `*/` are all rejected.
 - **No double quotes**, so no quoted identifiers. Use bare `snake_case` names.
 - **Your query must begin with `SELECT`.** A leading `WITH` is rejected — see [Common gotchas](#common-gotchas).
-- Every table after `FROM` or `JOIN` must be one of the ten tables listed below.
+- Every table after `FROM` or `JOIN` must be one of the eleven tables listed below.
 
 Saved SQL runs are free and never consume AI credits. Credits apply only when you *generate* SQL from a prompt.
 
@@ -34,6 +34,26 @@ Identical queries completing within 10 minutes of each other are served from cac
 `TIMESTAMP` values serialize as ISO 8601 strings. `JSONB` columns come back as parsed objects. Note that **`BIGINT` and `NUMERIC` values are returned as strings**, not numbers — all the aggregate counts and rate columns in `campaign_performance` and the `email_*` counters in `contact_360` are affected. Cast in your client before doing arithmetic.
 
 ## Tables
+
+### `app_events`
+
+[Custom events](/integrations/custom-events) you send from your own product. This is how product behavior — signups, deposits, upgrades — becomes queryable alongside on-chain and messaging data.
+
+| Column | Type |
+| --- | --- |
+| `id` | `TEXT` |
+| `organization_id` | `TEXT` |
+| `contact_id` | `TEXT` nullable |
+| `event` | `TEXT` |
+| `payload` | `JSONB` nullable |
+| `occurred_at` | `TIMESTAMP` |
+| `created_at` | `TIMESTAMP` |
+
+<Note>
+Events sent with `test: true` are **excluded** from this table by design, so your test traffic never contaminates a segment or report.
+</Note>
+
+Use `occurred_at` rather than `created_at` for time windows — `occurred_at` is when the event happened in your system, `created_at` is when we received it.
 
 ### `contacts`
 

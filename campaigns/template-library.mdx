@@ -1,16 +1,65 @@
 ---
 title: "Template Library"
-description: "Manage reusable templates for recurring campaign and lifecycle use cases."
+description: "Reuse email content across campaigns and automations with organization templates."
 ---
 
-## Why Templates Matter
+Templates hold reusable email content. They cut production time, keep branding consistent, and make approval easier for recurring sends.
 
-Templates reduce production time, improve brand consistency, and make approval easier across repeated sends.
+## Two kinds of template
 
-## Good Template Types
+| | Organization templates | Email gallery |
+| --- | --- | --- |
+| Scope | Your workspace | Per user, with access levels |
+| Attaches to campaigns | **Yes** | No |
+| Used by automations | Yes | No |
+| Has categories and tags | No | Yes |
 
-- Product announcements
-- Governance reminders
-- Re-engagement emails
-- Rewards or claim notices
+Only **organization templates** can be attached to a campaign or referenced by an automation's `send_email` step. The gallery is a browsing and starting-point surface.
+
+## Attaching one
+
+```bash
+curl -X PUT https://api.onchainsuite.com/api/v1/campaigns/$ID/template \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "templateId": "tpl_welcome" }'
+```
+
+The template must belong to your organization or the request returns 404. Send `null` to detach.
+
+Template content is the **lowest** precedence at render time: an explicit request override wins, then content stored on the campaign, then the template. So editing a campaign's body detaches it from the template's content in practice — the template is a starting point, not a live link.
+
+## In-app templates
+
+A template can hold in-app push content instead of email by setting its channel to `inapp`. These are what you reference from an [in-app push](/integrations/in-app-notifications) `templateId`, and they support the same merge variables.
+
+An email template passed where an in-app template is expected is rejected — the channel must match.
+
+## Worth templating
+
+- Product and protocol announcements
+- Governance and voting reminders
+- Re-engagement and win-back
+- Rewards, claim, and airdrop notices
 - Onboarding sequence starters
+
+## Practices that hold up
+
+<AccordionGroup>
+  <Accordion title="Build fallbacks into the template" icon="shield">
+    Put `| default:"…"` on every optional merge variable in the template itself, so every campaign built from it inherits safe rendering rather than rediscovering `RENDER_FIELD_MISSING` at launch.
+  </Accordion>
+
+  <Accordion title="Prefer greetingName in salutations" icon="user">
+    `{{ profile.greetingName }}` never renders blank, which makes a template safe for contacts with no name on file.
+  </Accordion>
+
+  <Accordion title="Keep one primary action" icon="hand-pointer">
+    Templates get reused far past their original context. A single clear call to action survives that; a layout with four competing buttons doesn't.
+  </Accordion>
+
+  <Accordion title="Duplicate the campaign, not the template" icon="copy">
+    For a recurring send, duplicating the last campaign carries content, audience, and tracking settings forward and resets status to draft.
+  </Accordion>
+</AccordionGroup>
+
+See the [email editor](/campaigns/email-editor) for the full merge variable and filter reference.

@@ -8,17 +8,28 @@
     "dark": "#010F31"
   },
   "favicon": "/logo/Icon_light.png",
+  "fonts": {
+    "family": "Instrument Sans"
+  },
+  "appearance": {
+    "default": "system"
+  },
+  "background": {
+    "decoration": "gradient",
+    "color": {
+      "light": "#FFFFFF",
+      "dark": "#010F31"
+    }
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": "dark"
+  },
   "logo": {
     "light": "/logo/light.png",
-    "dark": "/logo/dark.png"
+    "dark": "https://res.cloudinary.com/dwnkqkx8q/image/upload/v1761095267/full_logo_horizontal_coloured_light_kl0irx.png"
   },
   "navbar": {
-    "links": [
-      {
-        "label": "Website",
-        "href": "https://onchainsuite.com"
-      }
-    ],
     "primary": {
       "type": "button",
       "label": "Visit Onchain Suite",
@@ -32,6 +43,7 @@
         "groups": [
           {
             "group": "Getting Started",
+            "icon": "rocket",
             "pages": [
               "index",
               "getting-started/overview",
@@ -42,6 +54,7 @@
           },
           {
             "group": "Campaigns",
+            "icon": "paper-plane",
             "pages": [
               "campaigns/overview",
               "campaigns/create-a-campaign",
@@ -53,6 +66,7 @@
           },
           {
             "group": "Audience",
+            "icon": "users",
             "pages": [
               "audience/overview",
               "audience/unified-profiles",
@@ -63,6 +77,7 @@
           },
           {
             "group": "Intelligence",
+            "icon": "chart-mixed",
             "pages": [
               "intelligence/overview",
               "intelligence/sql-query-editor",
@@ -74,6 +89,7 @@
           },
           {
             "group": "Automation",
+            "icon": "bolt",
             "pages": [
               "automation/overview",
               "automation/create-an-automation",
@@ -84,6 +100,7 @@
           },
           {
             "group": "Project Settings",
+            "icon": "gear",
             "pages": [
               "settings/overview",
               "settings/branding",
@@ -95,9 +112,11 @@
           },
           {
             "group": "Integrations",
+            "icon": "plug",
             "pages": [
               "integrations/overview",
               "integrations/in-app-notifications",
+              "integrations/custom-events",
               "integrations/api-keys",
               "integrations/webhook-events",
               "integrations/wallet-and-contract-data",
@@ -106,38 +125,37 @@
           },
           {
             "group": "Help",
+            "icon": "circle-question",
             "pages": [
               "help/faq",
               "help/troubleshooting",
               "help/glossary"
             ]
           }
-        ]
+        ],
+        "icon": "grid-2"
       },
       {
         "tab": "Build on the Platform",
         "groups": [
           {
             "group": "Developers",
+            "icon": "code",
             "pages": [
               "api/overview",
               "api/authentication",
               "api/webhooks",
               "api/rate-limits",
-              "api/sql-schema"
+              "api/sql-schema",
+              "api/mcp"
             ]
           }
-        ]
+        ],
+        "icon": "terminal"
       }
     ],
     "global": {
-      "anchors": [
-        {
-          "anchor": "Onchain Suite",
-          "href": "https://onchainsuite.com",
-          "icon": "globe"
-        }
-      ]
+      "anchors": []
     }
   },
   "contextual": {

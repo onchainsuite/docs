@@ -1,0 +1,278 @@
+---
+title: "Custom Events"
+description: "Send product events from your own systems to trigger automations, build segments, and query behavior alongside onchain activity."
+---
+
+Custom events let you send anything that happens in your product — a signup, a deposit, a plan upgrade, a support ticket — into Onchain Suite. Once ingested, an event can trigger an automation, feed a segment, and be queried in SQL next to onchain and messaging data.
+
+<Note>
+Event names are entirely free-form. There is no schema to register and no reserved vocabulary — send `first_deposit` and it exists.
+</Note>
+
+## Sending your first event
+
+Ingestion is authenticated with a **secret key**, so it happens server-side. The organization is derived from the key.
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/events \
+  -H "Authorization: Bearer sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event": "first_deposit",
+    "contact": { "walletAddress": "0xabc..." },
+    "attributes": { "tier": "gold" },
+    "payload": { "amountUsd": 2500, "chain": "base-mainnet" },
+    "idempotencyKey": "deposit:0xabc:9184",
+    "occurredAt": "2026-07-19T12:00:00.000Z"
+  }'
+```
+
+Returns `202 Accepted`:
+
+```json
+{
+  "accepted": true,
+  "deduplicated": false,
+  "idempotencyKey": "deposit:0xabc:9184"
+}
+```
+
+Ingestion is asynchronous — `202` means accepted for processing, not that automations have already run.
+
+### Request fields
+
+<ParamField path="event" type="string" required>
+  Event name. Must match `^[a-zA-Z0-9_.:-]{1,64}$` and is lowercased on arrival, so `First_Deposit` and `first_deposit` are the same event.
+</ParamField>
+
+<ParamField path="contact" type="object" required>
+  Who the event belongs to. Must contain at least one of `email`, `walletAddress`, or `externalId`.
+</ParamField>
+
+<ParamField path="contact.email" type="string">
+  Valid email, max 320 characters.
+</ParamField>
+
+<ParamField path="contact.walletAddress" type="string">
+  Max 128 characters. Lowercased on arrival, so casing never causes a mismatch.
+</ParamField>
+
+<ParamField path="contact.externalId" type="string">
+  Your own user ID. Max 128 characters, case preserved.
+</ParamField>
+
+<ParamField path="attributes" type="object">
+  Contact traits merged onto the contact record. Max 50 keys; values must be string, number, or boolean; string values max 1024 bytes.
+</ParamField>
+
+<ParamField path="payload" type="object">
+  Event-specific data, kept with the event rather than the contact. Max 16 KB serialized. Nested objects allowed.
+</ParamField>
+
+<ParamField path="idempotencyKey" type="string">
+  Your dedup key, max 256 characters. Strongly recommended — see [Idempotency](#idempotency).
+</ParamField>
+
+<ParamField path="occurredAt" type="string">
+  ISO 8601 timestamp of when the event happened. Defaults to now. Rejected if older than 7 days or more than 5 minutes in the future.
+</ParamField>
+
+<ParamField path="test" type="boolean">
+  Dry run — see [Testing safely](#testing-safely).
+</ParamField>
+
+### `attributes` vs `payload`
+
+This distinction matters more than it looks:
+
+| | `attributes` | `payload` |
+| --- | --- | --- |
+| Stored on | The **contact**, merged and persistent | The **event**, immutable |
+| Use for | Traits: `tier`, `plan`, `country` | Facts: `amountUsd`, `txHash` |
+| Overwrites | Yes — last write wins per key | No |
+| Size | 50 keys, 1 KB per value | 16 KB total |
+
+Put things that describe the *person* in `attributes`, and things that describe the *event* in `payload`.
+
+## Batch ingestion
+
+Send up to 100 events in one request:
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/events/batch \
+  -H "Authorization: Bearer sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "events": [
+      { "event": "account_created", "contact": { "email": "a@example.com" } },
+      { "event": "first_deposit",   "contact": { "walletAddress": "0xabc..." } }
+    ]
+  }'
+```
+
+Results come back in request order:
+
+```json
+{
+  "results": [
+    { "accepted": true, "deduplicated": false, "idempotencyKey": "…" },
+    { "accepted": false, "deduplicated": false, "error": "…" }
+  ]
+}
+```
+
+<Warning>
+A batch always returns `202`, even when individual events fail. One bad event never rejects the others — **you must inspect each result**. Rate-limit rejections also surface as per-item `error` strings rather than a top-level `429`.
+</Warning>
+
+## Identity resolution
+
+Each event is matched to a contact in strict priority order:
+
+<Steps>
+  <Step title="Wallet address">
+    Case-insensitive match on `walletAddress`.
+  </Step>
+  <Step title="Email">
+    Matched through a blind index, so encrypted email still resolves.
+  </Step>
+  <Step title="External ID">
+    Matched against `externalId` stored in contact metadata.
+  </Step>
+</Steps>
+
+**If no contact matches, one is created.** A wallet-only contact is valid — email is not required. Any `attributes` you send are merged into the new contact's metadata, and `externalId` is backfilled onto existing contacts that lack one.
+
+<Note>
+Because the first matching identifier wins, sending both `walletAddress` and `email` resolves on the wallet. To merge an email onto an existing wallet contact, send both — the wallet finds the record, and the email is stored on it.
+</Note>
+
+## Idempotency
+
+Every event gets an idempotency key, scoped to your organization. A repeat of the same key is accepted but not reprocessed, and returns `deduplicated: true`.
+
+When you don't supply one, it's derived by hashing the event name, all three identifiers, and `occurredAt`.
+
+<Warning>
+**Retries are not deduplicated unless you send an explicit `idempotencyKey` or an explicit `occurredAt`.** The derived key includes `occurredAt`, which defaults to *now* — so the same call made twice a second apart produces two different keys and two events, which can fire an automation twice.
+
+Always send an `idempotencyKey` built from something stable in your system, like `deposit:<txHash>:<logIndex>`.
+</Warning>
+
+## Testing safely
+
+Two ways to dry-run:
+
+- Send with a **`sk_test_*` key** — everything from that key is a dry run automatically.
+- Send `"test": true` with a live key.
+
+A dry-run event reports how many automations it *would* have matched, but creates no automation entries, so **nothing sends**. Test events are also hidden from the event catalog and excluded from the `app_events` SQL table, so they never contaminate a segment or report.
+
+## Triggering automations
+
+Custom events are a first-class automation trigger. Use trigger type **`app_event`** (aliases `custom_event`, `app-event`, `custom-event`, `appevent` are all accepted).
+
+```json
+{
+  "type": "app_event",
+  "eventNames": ["first_deposit"],
+  "filters": [
+    { "path": "tier", "operator": "eq", "value": "gold" },
+    { "path": "amountUsd", "operator": "exists" }
+  ]
+}
+```
+
+<Warning>
+**An empty event-name list is a wildcard.** A trigger with no `event` and no `eventNames` matches *every* custom event in your organization. Always name the events you want.
+</Warning>
+
+### Filter paths
+
+Filters read a flat context where your `payload` keys are spread in at the top level. So the path is `amountUsd`, **not** `payload.amountUsd`:
+
+```json
+{ "path": "amountUsd", "operator": "exists" }
+```
+
+Available alongside your payload keys: `event`, `contactId`, `walletAddress`, `email`, `externalId`. A payload key with one of those names overrides the built-in value, so avoid naming a payload field `email`.
+
+Operators are `eq`, `neq`, `in`, `contains`, and `exists` — the same set used by on-chain triggers, and all filters must pass. See [Triggers and Conditions](/automation/triggers-and-conditions) for the details, including the note that unrecognized operators are silently dropped.
+
+## Querying events in SQL
+
+Events land in the `app_events` table in the [Intelligence SQL editor](/intelligence/sql-query-editor):
+
+```sql
+-- Contacts who created an account but never deposited
+SELECT c.email, c.wallet_address, created.occurred_at
+FROM app_events created
+JOIN contacts c ON c.id = created.contact_id
+LEFT JOIN app_events deposited
+  ON deposited.contact_id = created.contact_id
+  AND deposited.event = 'first_deposit'
+WHERE created.event = 'account_created'
+  AND deposited.id IS NULL
+ORDER BY created.occurred_at DESC
+LIMIT 100
+```
+
+Use `occurred_at` for time windows — it's when the event happened in your system. `created_at` is when we received it.
+
+## Discovering event names
+
+`GET /api/v1/events/catalog` returns the distinct event names seen in the last 30 days with counts, ordered by frequency. This powers autocomplete in the builder and is useful for spotting typos in event names.
+
+```json
+{
+  "events": [{ "event": "first_deposit", "count": 42 }],
+  "windowDays": 30
+}
+```
+
+Test events are excluded, and the list is capped at 200 names.
+
+## Limits and errors
+
+| Limit | Value |
+| --- | --- |
+| Ingest rate | 50 events/sec per organization, burst 100 |
+| Batch size | 100 events |
+| Event name | 64 characters |
+| Attributes | 50 keys, 1 KB per value |
+| Payload | 16 KB |
+| Event age | 7 days back, 5 minutes forward |
+
+Ingestion itself is free and not metered against your plan — only messages sent as a result are.
+
+| Status | Meaning |
+| --- | --- |
+| `202` | Accepted (check `deduplicated`) |
+| `400` | Validation failure — the message names the field |
+| `401` | Missing, invalid, or revoked secret key |
+| `429` | `RATE_LIMITED` — back off and retry |
+| `503` | `INGEST_UNAVAILABLE` — retry with the same `idempotencyKey` |
+
+<Note>
+`429` responses do not currently include a `Retry-After` header. Use exponential backoff, and keep the same `idempotencyKey` across retries so a late success doesn't double-fire.
+</Note>
+
+## Things to know
+
+<AccordionGroup>
+  <Accordion title="Events are retained indefinitely" icon="database">
+    There is currently no automatic pruning of custom events. Plan for the table to grow, and prefer `payload` fields you'll actually query.
+  </Accordion>
+
+  <Accordion title="The rate limit is per instance" icon="gauge">
+    The 50/sec bucket is held in memory per API instance, so effective throughput scales with the number of running instances. Treat 50/sec as the safe floor rather than a hard ceiling.
+  </Accordion>
+
+  <Accordion title="Unknown top-level fields are dropped silently" icon="filter">
+    Fields outside the documented set are stripped rather than rejected. If data seems to be missing, check that it's nested inside `attributes` or `payload` rather than sitting at the top level.
+  </Accordion>
+
+  <Accordion title="Put the trigger node first in the builder" icon="diagram-project">
+    Custom-event trigger nodes aren't yet recognized by the builder's trigger-node detection, which falls back to the first node in the graph. Keep your `app_event` trigger as the first node so run inspection labels steps correctly.
+  </Accordion>
+</AccordionGroup>

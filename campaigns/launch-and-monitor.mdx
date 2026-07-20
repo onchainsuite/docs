@@ -1,16 +1,98 @@
 ---
 title: "Launch and Monitor"
-description: "Launch campaigns with confidence and track the signals that matter after send."
+description: "Launch a campaign and read the metrics — including exactly how each rate is calculated."
 ---
 
-## Before Launch
+## Before launch
 
-Confirm audience logic, sender settings, links, and rendering are all reviewed.
+- Validation passes with no errors
+- Preview reports no missing merge fields
+- A test send rendered correctly in a real email client
+- The audience estimate matches what you expect
+- Sender identity is verified
 
-## What To Monitor
+## Launching
 
-- Delivery and bounce trends
-- Opens and clicks
-- Segment-specific engagement differences
-- Unsubscribes or suppression activity
-- Downstream product or onchain response
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/launch \
+  -H "x-org-id: $ORG_ID"
+```
+
+Launch re-runs validation and rejects with `422 VALIDATION_FAILED` if anything is outstanding. It then checks your monthly allowance against the estimated recipients plus what you've already sent this calendar month, returning `402 PLAN_LIMIT_EXCEEDED` if the send wouldn't fit.
+
+Only `DRAFT` and `SCHEDULED` campaigns can launch; anything else returns a conflict.
+
+<Warning>
+Scheduling does **not** send. There is no scheduler — a campaign left in `SCHEDULED` stays there indefinitely. Launch manually at the intended time.
+</Warning>
+
+Sending is asynchronous: the campaign moves to `SENDING`, is delivered in batches, then moves to `SENT`.
+
+## Metrics
+
+`GET /campaigns/{id}/analytics` returns email and in-app funnels plus a combined total.
+
+### Email
+
+| Metric | Definition |
+| --- | --- |
+| `sent` | Queued plus sent |
+| `delivered` | Confirmed by the provider |
+| `uniqueOpens` | Distinct recipients who opened |
+| `totalClicks` / `uniqueClicks` | All clicks, and distinct recipients |
+| `bounces`, `complaints`, `unsubscribes`, `suppressed`, `failed` | Negative outcomes |
+| `deliveryRate` | `delivered ÷ sent` |
+| `openRate`, `clickRate`, `unsubscribeRate` | Over `delivered`, falling back to `sent` |
+| `clickToOpenRate` | `uniqueClicks ÷ uniqueOpens` |
+
+Rates are percentages rounded to two decimals, and `0` when the denominator is zero.
+
+<Note>
+Open and click rates use `delivered` as the denominator **only when delivery confirmations are flowing**. If provider delivery events aren't wired up, `delivered` is zero and the denominator silently falls back to `sent`. Compare `sent` and `delivered` before reading too much into a rate.
+</Note>
+
+### In-app
+
+`sent`, `delivered`, `viewed`, `clicked`, `dismissed`, plus `deliveryRate`, `viewRate`, `clickRate`, and `dismissRate`.
+
+In-app has no open pixel — `delivered` is reported by the client when it receives the push, which makes it more reliable than an email open, not less.
+
+## What to watch
+
+<AccordionGroup>
+  <Accordion title="Delivery and bounce trends" icon="triangle-exclamation">
+    A rising bounce rate damages sending reputation for every future campaign. Hard bounces are suppressed automatically, but the underlying list-quality problem is yours to fix.
+  </Accordion>
+
+  <Accordion title="Opens and clicks" icon="chart-line">
+    Click-to-open is the honest engagement signal — open tracking is increasingly blocked by mail clients, so open rate alone reads low and noisy.
+  </Accordion>
+
+  <Accordion title="Unsubscribes" icon="user-minus">
+    An unsubscribe sets a flag on the contact that every future campaign honors. Watch the rate per campaign, not just the total — a spike means targeting or frequency, not content.
+  </Accordion>
+
+  <Accordion title="Onchain response" icon="link">
+    The reason to send from a wallet-aware platform. Query [`contact_360`](/api/sql-schema) or `wallet_activity_summary` to see whether recipients actually transacted after the send.
+  </Accordion>
+</AccordionGroup>
+
+## Audit trail
+
+`GET /campaigns/{id}/events` returns the campaign's history — drafted, audience updated, tracking updated, test sent, scheduled, launched, sent — oldest first. This is the fastest way to answer "who changed the audience before this went out".
+
+## Workspace view
+
+`GET /campaigns/analytics/overview?days=30` aggregates across campaigns for a window of 1–90 days, and includes your allowance:
+
+```json
+{
+  "rangeDays": 30,
+  "email": { },
+  "inapp": { },
+  "totals": { "messagesSent": 12480 },
+  "allowance": { "limitKey": "emailsPerMonth", "limit": 25000, "used": 12480, "remaining": 12520 }
+}
+```
+
+`limit` and `remaining` are `null` on unlimited plans. Note that the overview's `uniqueClicks` is total clicks rather than distinct recipients — use the per-campaign endpoint when the distinction matters.

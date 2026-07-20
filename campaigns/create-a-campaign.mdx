@@ -1,30 +1,122 @@
 ---
 title: "Create a Campaign"
-description: "Create an email campaign in Onchain Suite from audience definition through content review."
+description: "Build a campaign from audience definition through validation, in the app or over the API."
 ---
 
-## When To Use This
-
-Use a campaign when you want to send a one-time message such as a product update, mint reminder, rewards announcement, or ecosystem activation email.
+Use a campaign for a one-time send to a defined cohort — a product update, mint reminder, rewards announcement, or ecosystem activation.
 
 ## Steps
 
-1. Open the target project and go to the campaign area.
-2. Click `New Campaign` and choose an email campaign type.
-3. Name the campaign clearly so reporting stays readable.
-4. Select or create the audience segment you want to reach.
-5. Choose a template or start from a blank editor.
-6. Add subject line, preview text, and sender details.
-7. Save a draft and hand it to teammates for review.
+<Steps>
+  <Step title="Create the campaign">
+    Name it for reporting: audience, goal, and date, e.g. "Base minters — claim reminder — Jul 2026". Campaign names are what you'll scan in analytics months later.
+  </Step>
+  <Step title="Define the audience">
+    Pick contacts, segments, or both. A contact matching either is included.
+  </Step>
+  <Step title="Check the estimate">
+    Confirm the recipient count is a number you expect **before** writing content. This is the cheapest place to catch a broken segment.
+  </Step>
+  <Step title="Add content">
+    Choose a template or start blank, then set subject, preview text, and sender. See the [email editor](/campaigns/email-editor).
+  </Step>
+  <Step title="Validate">
+    Run validation and clear every error — the same checks run at launch, so anything unresolved blocks the send.
+  </Step>
+  <Step title="Preview and test">
+    Continue to [Preview and Test Send](/campaigns/preview-and-test-send).
+  </Step>
+</Steps>
 
-## Recommended Setup Checklist
+## Validation errors
 
-- Use a campaign name that includes audience, goal, and date.
-- Confirm the sender identity matches the project brand.
-- Keep one primary CTA per email.
-- Review links, personalization tokens, and fallback text.
-- Validate the audience size before moving to testing.
+| Code | Fix |
+| --- | --- |
+| `NAME_REQUIRED` | Give the campaign a name |
+| `AUDIENCE_REQUIRED` | Select at least one contact or segment |
+| `SUBJECT_REQUIRED` | Add a subject line |
+| `SENDER_NAME_REQUIRED` / `SENDER_EMAIL_REQUIRED` | Set a verified sender |
+| `EMAIL_BODY_EMPTY` | Body has no HTML and no text |
+| `RENDER_FIELD_MISSING` | A merge variable renders blank — add a `default` filter |
+| `SCHEDULE_REQUIRED` / `TIMEZONE_REQUIRED` | Complete the schedule |
+| `DRIP_STEPS_REQUIRED` | A drip campaign needs at least one step |
+| `CHANNELS_REQUIRED` / `CHANNEL_CONTENT_REQUIRED` | Multi-channel campaign missing a channel or its content |
 
-## Next Step
+`RENDER_FIELD_MISSING` is by far the most common. See [Missing values block sends](/campaigns/email-editor#missing-values-block-sends).
 
-Continue to [Preview and Test Send](/campaigns/preview-and-test-send) before scheduling or launching.
+## Setup checklist
+
+- Campaign name includes audience, goal, and date
+- Sender identity is verified and matches the project brand
+- One primary call to action
+- Every merge variable has a fallback
+- Audience estimate reviewed, including the smart-sending exclusion count
+
+## Over the API
+
+Base path `https://api.onchainsuite.com/api/v1`. Reads allow any role; writes need `OWNER`, `ADMIN`, or `EDITOR`; delete needs `OWNER` or `ADMIN`.
+
+```bash
+# Create
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "name": "Base minters — claim reminder", "subject": "Your claim is live" }'
+
+# Set the audience
+curl -X PUT https://api.onchainsuite.com/api/v1/campaigns/$ID/audience \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "profileIds": [], "segmentIds": ["seg_base_minters"] }'
+
+# Estimate before you commit
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/audience/estimate \
+  -H "x-org-id: $ORG_ID"
+# → { "recipientCount": 1240, "excludedBySmartSending": 0 }
+
+# Validate
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/validate \
+  -H "x-org-id: $ORG_ID"
+# → { "valid": true, "errors": [] }
+```
+
+<Note>
+Both `profileIds` and `segmentIds` are required arrays on the audience endpoint — send `[]` for the one you aren't using rather than omitting it.
+</Note>
+
+### Useful endpoints
+
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/campaigns` | List — filter by `status`, `type`, `search` |
+| `POST` | `/campaigns` | Create a draft |
+| `PUT` | `/campaigns/{id}` | Update name, subject, sender, content |
+| `PUT` | `/campaigns/{id}/audience` | Set contacts and segments |
+| `POST` | `/campaigns/{id}/audience/estimate` | Recipient count |
+| `PUT` | `/campaigns/{id}/content` | Subject, preview text, sender fields |
+| `PUT` | `/campaigns/{id}/template` | Attach a template |
+| `PUT` | `/campaigns/{id}/tracking` | Open, click, UTM, smart sending |
+| `POST` | `/campaigns/{id}/validate` | Pre-launch checks |
+| `POST` | `/campaigns/{id}/preview` | Render without sending |
+| `POST` | `/campaigns/{id}/send-test` | Send to one address |
+| `POST` | `/campaigns/{id}/launch` | Send |
+| `POST` | `/campaigns/{id}/duplicate` | Copy as a new draft |
+| `GET` | `/campaigns/{id}/analytics` | Results |
+| `GET` | `/campaigns/{id}/events` | Audit trail |
+
+Duplicating copies content and audience but resets status to draft and clears stats — the fastest way to run a recurring send.
+
+## Goals
+
+A campaign can carry conversion goals measured over an attribution window (1–90 days, default 14).
+
+| Type | Measures |
+| --- | --- |
+| `onchain_activity` | Wallet activity after send |
+| `contact_score_gte` | Contact score crossing a threshold |
+| `email_open` | Email opens |
+| `email_click` | Email clicks |
+
+<Warning>
+`email_open` and `email_click` goals always report zero — they look for recipient data under a key the send pipeline doesn't write. Use the [campaign analytics](/campaigns/launch-and-monitor) endpoint for open and click rates instead, which reads the events correctly.
+</Warning>
+
+Goal measurement covers up to 10,000 contacts and flags the result as truncated beyond that.

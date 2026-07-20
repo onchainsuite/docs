@@ -1,0 +1,147 @@
+/*
+ * Onchain Suite docs — brand styling.
+ *
+ * Mintlify automatically loads any .css file in the content directory, so this
+ * file needs no import or docs.json reference.
+ *
+ * Palette (internal-notes/Branding-Guide.txt):
+ *   Cloud #F0F7FF · Electric Blue #1727E0 · Midnight #010F31
+ *   Sky   #2F94FF · Accent Orange #FF6828
+ */
+
+:root {
+  --os-cloud: #f0f7ff;
+  --os-electric: #1727e0;
+  --os-midnight: #010f31;
+  --os-sky: #2f94ff;
+  --os-accent: #ff6828;
+
+  --os-gradient-blue: linear-gradient(90deg, #2f94ff 0%, #1727e0 100%);
+  --os-gradient-bright: linear-gradient(90deg, #f0f7ff 0%, #2f94ff 50%, #1727e0 100%);
+}
+
+/* ---------------------------------------------------------------------------
+ * Logo — larger than the Mintlify default.
+ * `nav-logo` is Mintlify's documented targeting hook for the navbar logo.
+ * These hooks are explicitly documented as subject to change, so the rules
+ * below are additive and degrade gracefully if the internals move.
+ * ------------------------------------------------------------------------ */
+nav-logo img,
+#navbar img[alt*="light logo" i],
+#navbar img[alt*="dark logo" i] {
+  height: 2.25rem !important;
+  max-height: 2.25rem !important;
+  width: auto !important;
+}
+
+@media (max-width: 640px) {
+  nav-logo img,
+  #navbar img[alt*="light logo" i],
+  #navbar img[alt*="dark logo" i] {
+    height: 1.75rem !important;
+    max-height: 1.75rem !important;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Headings — brand type treatment. Tighter tracking at display sizes, matching
+ * the -1px tracking in the brand guide scaled to a practical ramp.
+ * ------------------------------------------------------------------------ */
+h1 {
+  letter-spacing: -0.03em;
+  font-weight: 700;
+}
+
+h2 {
+  letter-spacing: -0.02em;
+  font-weight: 600;
+}
+
+h3 {
+  letter-spacing: -0.01em;
+  font-weight: 600;
+}
+
+/* ---------------------------------------------------------------------------
+ * Cards — lift on hover, brand-tinted border, subtle depth.
+ * ------------------------------------------------------------------------ */
+#content-area .card {
+  transition:
+    transform 0.18s ease,
+    box-shadow 0.18s ease,
+    border-color 0.18s ease;
+}
+
+#content-area .card:hover {
+  transform: translateY(-2px);
+  border-color: color-mix(in srgb, var(--os-sky) 55%, transparent);
+  box-shadow: 0 8px 24px -12px color-mix(in srgb, var(--os-electric) 45%, transparent);
+}
+
+.dark #content-area .card:hover {
+  border-color: color-mix(in srgb, var(--os-sky) 45%, transparent);
+  box-shadow: 0 8px 28px -12px color-mix(in srgb, var(--os-sky) 30%, transparent);
+}
+
+/* ---------------------------------------------------------------------------
+ * Hero — used by the landing page (mode: "custom").
+ * ------------------------------------------------------------------------ */
+/*
+ * Gradient runs dark-to-bright on light backgrounds and bright-to-mid on dark
+ * ones, so the final words never approach the page background. The brand's
+ * Cloud (#F0F7FF) and Midnight (#010F31) stops are deliberately avoided here —
+ * each is near-invisible against one of the two themes.
+ */
+.os-hero-title {
+  background: linear-gradient(100deg, #010f31 0%, #1727e0 55%, #2f94ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  letter-spacing: -0.035em;
+}
+
+.dark .os-hero-title {
+  background: linear-gradient(100deg, #ffffff 0%, #bfdbff 40%, #2f94ff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.os-hero-rule {
+  height: 1px;
+  border: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    color-mix(in srgb, var(--os-sky) 60%, transparent) 50%,
+    transparent 100%
+  );
+}
+
+/* Accent-orange eyebrow, used sparingly per the brand guide. */
+.os-eyebrow {
+  color: var(--os-accent);
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+/* ---------------------------------------------------------------------------
+ * Tables — lighter rhythm, easier to scan for the large reference tables in
+ * the SQL schema and trigger catalogs.
+ * ------------------------------------------------------------------------ */
+#content-area table {
+  font-size: 0.9375rem;
+}
+
+#content-area thead th {
+  font-weight: 600;
+  letter-spacing: -0.005em;
+}
+
+/* Reduce visual weight of the many inline codes inside reference tables. */
+#content-area table code {
+  font-size: 0.875em;
+  white-space: nowrap;
+}

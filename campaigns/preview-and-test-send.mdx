@@ -1,29 +1,78 @@
 ---
 title: "Preview and Test Send"
-description: "Validate rendering, links, and audience behavior before launching a live email campaign."
+description: "Validate rendering, personalization, and links before a live send."
 ---
 
-## Why Testing Matters
+Campaigns depend on dynamic wallet traits and merge variables, so most send failures are personalization failures. A preview cycle catches them while they're still cheap.
 
-Web3 campaigns often rely on dynamic audience criteria, wallet traits, and time-sensitive announcements. A fast preview cycle prevents broken personalization and incorrect targeting.
+## Preview
 
-## Test Workflow
+Preview renders the campaign exactly as the send pipeline would, and returns the HTML, the plain-text version, any unresolved merge fields, and any warnings.
 
-1. Open the campaign draft.
-2. Use the preview mode to inspect layout and personalization.
-3. Send a test email to internal reviewers.
-4. Check mobile and desktop rendering.
-5. Verify every CTA, tracked link, and unsubscribe path.
-6. Confirm the selected audience matches the intended segment.
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/preview \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "recipient": { "email": "reviewer@example.com" } }'
+```
 
-## What To Verify
+Pass a `recipient` to render as a specific contact. Anything you supply is merged over the stored contact, so you can preview edge cases — a contact with no first name, or no ENS — without creating test data.
 
-- Subject line and preview text render correctly.
-- Sender name and sender address match the campaign.
-- Dynamic values have sensible fallbacks.
-- Images load and links resolve.
-- Suppression and opt-out behavior are respected.
+```json
+{ "recipient": { "email": "reviewer@example.com", "firstName": "" } }
+```
 
-## Launch Readiness
+The response's `missingFields` is the list that will block your launch. Treat a non-empty `missingFields` as a failing check even when the preview looks fine.
 
-A campaign is usually ready when content is approved, sender settings are verified, and internal test sends match expectations across devices.
+## Test send
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/send-test \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "to": "reviewer@example.com" }'
+```
+
+`to` is required. The same content overrides available to preview work here too.
+
+<Warning>
+**Test sends are invisible to analytics.** They carry no tracking pixel and no click wrapping, and record no delivery event. Opening or clicking a test email will never appear in campaign results — and can't be used to verify that tracking works.
+</Warning>
+
+Test sends also skip the plan allowance check, so they won't consume your monthly messages.
+
+### Test send errors
+
+| Code | Meaning |
+| --- | --- |
+| `EMAIL_BODY_EMPTY` | Both HTML and text are blank |
+| `EMAIL_PROVIDER_PAYLOAD_INVALID` | A required field is missing — the response lists which |
+| `EMAIL_RENDER_VALIDATION_FAILED` | Unresolved merge variables, with a hint on fixing them |
+
+## What to verify
+
+<AccordionGroup>
+  <Accordion title="Personalization has fallbacks" icon="user">
+    Preview as a contact missing the optional fields. Every variable should degrade to something readable — `Hey there,` not `Hey ,`.
+  </Accordion>
+
+  <Accordion title="The sender is the one you chose" icon="paper-plane">
+    The sender is resolved from **verified** identities at render time. If the test arrives from an unexpected address, your intended sender isn't verified — check the render warnings and [Sender Verification](/settings/sender-verification).
+  </Accordion>
+
+  <Accordion title="Links resolve and carry the right parameters" icon="link">
+    Check that UTM parameters appear only where you intended. Existing parameters on a link are never overwritten.
+  </Accordion>
+
+  <Accordion title="Rendering on mobile and desktop" icon="mobile">
+    Test emails are real emails — check them in an actual client, not just the preview pane.
+  </Accordion>
+
+  <Accordion title="The audience is the one you meant" icon="users">
+    Re-check the estimate. A segment whose criteria changed since you built the campaign will quietly change your recipient count.
+  </Accordion>
+</AccordionGroup>
+
+## Ready to launch
+
+A campaign is ready when validation passes with no errors, `missingFields` is empty in preview, a test send renders correctly in a real client, and the audience estimate matches expectation.
+
+Continue to [Launch and Monitor](/campaigns/launch-and-monitor).

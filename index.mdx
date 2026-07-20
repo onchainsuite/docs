@@ -1,52 +1,122 @@
 ---
 title: "Onchain Suite Docs"
-description: "The communication infrastructure layer for Web3: connect onchain behavior to identity, segmentation, messaging, and measurement."
+description: "The communication infrastructure layer for Web3 — connect onchain behavior to identity, segmentation, messaging, and measurement."
+mode: "custom"
 ---
 
-## Start Here
+<div className="px-4 pt-16 pb-10 lg:pt-28 lg:pb-14 max-w-4xl mx-auto text-center">
+  <p className="os-eyebrow">Retention infrastructure for Web3</p>
 
-Onchain Suite is a retention automation platform built for Web3. It gives growth and lifecycle teams one operating loop for behavior-triggered messaging: detect onchain activity, resolve identity, segment users, message in the right channel, and measure the outcome.
+  <h1 className="os-hero-title mt-4 text-4xl lg:text-6xl font-bold tracking-tight">
+    Turn onchain behavior into messages that land
+  </h1>
 
-Use these docs in two ways:
+  <p className="mt-6 text-lg lg:text-xl text-gray-500 dark:text-zinc-400 max-w-2xl mx-auto">
+    Detect what wallets do. Resolve who they are. Reach them by email or in-app push —
+    and measure whether it worked. One loop, wallet-first.
+  </p>
 
-- If you operate campaigns, start with `Getting Started`, `Audience`, `Campaigns`, and `Automation`.
-- If you build integrations, jump to `Build on the Platform` for API and webhook guidance.
+  <div className="mt-8 flex flex-wrap gap-3 justify-center">
+    <a
+      href="/getting-started/overview"
+      className="inline-flex items-center rounded-lg bg-[#1727E0] px-5 py-2.5 text-sm font-semibold text-white no-underline hover:bg-[#2F94FF] transition-colors"
+    >
+      Get started
+    </a>
+    <a
+      href="/api/overview"
+      className="inline-flex items-center rounded-lg border border-gray-200 dark:border-zinc-700 px-5 py-2.5 text-sm font-semibold text-gray-900 dark:text-zinc-100 no-underline hover:border-[#2F94FF] transition-colors"
+    >
+      Build an integration
+    </a>
+  </div>
+</div>
 
-<Columns cols={2}>
-  <Card title="Getting Started" icon="rocket" href="/getting-started/overview">
-    Understand the platform model and the fastest path to first value.
-  </Card>
-  <Card title="Audience" icon="users" href="/audience/overview">
-    See how wallet-first profiles, segments, and health signals fit together.
-  </Card>
-  <Card title="Campaigns" icon="envelope-open-text" href="/campaigns/overview">
-    Build one-off sends tied to real wallet, product, and lifecycle behavior.
-  </Card>
-  <Card title="Automation" icon="bolt" href="/automation/overview">
-    Launch plays and triggered journeys from protocol or product events.
-  </Card>
-</Columns>
+<div className="px-4 max-w-6xl mx-auto">
+  <hr className="os-hero-rule" />
+</div>
 
-## Core Loop
+<div className="px-4 py-14 max-w-6xl mx-auto">
+  <h2 className="text-2xl font-semibold tracking-tight text-center">Start where you are</h2>
+  <p className="mt-3 text-center text-gray-500 dark:text-zinc-400">
+    Two paths through these docs, depending on what you're doing today.
+  </p>
 
-Onchain Suite replaces the Web3 patchwork stack with one operating loop:
+  <div className="mt-10">
+    <Columns cols={2}>
+      <Card title="Run campaigns" icon="paper-plane" href="/getting-started/overview" horizontal>
+        Set up a workspace, build an audience, and send your first campaign.
+      </Card>
+      <Card title="Build an integration" icon="code" href="/api/overview" horizontal>
+        Send custom events, push in-app notifications, and query your data.
+      </Card>
+    </Columns>
+  </div>
+</div>
 
-1. Detect onchain and product behavior.
-2. Resolve wallet-linked identity and reachable channels.
-3. Build audiences from rules, reports, or SQL.
-4. Send in-app and email messages through one workflow model.
-5. Measure engagement, retention, and follow-up opportunity.
+<div className="px-4 pb-8 max-w-6xl mx-auto">
+  <h2 className="text-2xl font-semibold tracking-tight text-center">The core loop</h2>
+  <p className="mt-3 text-center text-gray-500 dark:text-zinc-400 max-w-2xl mx-auto">
+    Every part of the platform is one stage of the same loop. Each stage feeds the next.
+  </p>
 
-## Product Pillars
+  <div className="mt-10">
+    <Columns cols={2}>
+      <Card title="Detect" icon="satellite-dish" href="/integrations/custom-events">
+        Capture onchain activity and custom product events as they happen.
+      </Card>
+      <Card title="Resolve" icon="fingerprint" href="/audience/unified-profiles">
+        Tie wallets, emails, and external IDs to one contact record.
+      </Card>
+      <Card title="Segment" icon="filter" href="/intelligence/sql-query-editor">
+        Build cohorts with rules or SQL across onchain and messaging data.
+      </Card>
+      <Card title="Reach" icon="tower-broadcast" href="/campaigns/overview">
+        Send email and wallet-addressed in-app push from one workflow.
+      </Card>
+      <Card title="Automate" icon="bolt" href="/automation/overview">
+        Trigger flows the moment a wallet does something worth responding to.
+      </Card>
+      <Card title="Measure" icon="chart-line" href="/campaigns/launch-and-monitor">
+        Track opens, clicks, and delivery across both channels.
+      </Card>
+    </Columns>
+  </div>
+</div>
 
-- Wallet-first identity keeps the wallet as the canonical user record.
-- Multi-channel activation lets one trigger fan out to the channels a user can actually receive.
-- Protocol plays help non-technical teams launch sophisticated retention workflows quickly.
-- Intelligence tools turn contract activity and campaign response into actionable segments.
+<div className="px-4 py-14 max-w-6xl mx-auto">
+  <h2 className="text-2xl font-semibold tracking-tight text-center">Popular guides</h2>
 
-## Recommended First Steps
+  <div className="mt-10">
+    <Columns cols={3}>
+      <Card title="In-app notifications" icon="bell" href="/integrations/in-app-notifications">
+        Wallet-authenticated push in your dApp — two lines with the SDK.
+      </Card>
+      <Card title="Custom events" icon="signal-stream" href="/integrations/custom-events">
+        Send product events and trigger automations from them.
+      </Card>
+      <Card title="SQL schema" icon="table" href="/api/sql-schema">
+        Every table, column, and type you can query.
+      </Card>
+      <Card title="Automation triggers" icon="diagram-project" href="/automation/triggers-and-conditions">
+        The full trigger catalog and filter operators.
+      </Card>
+      <Card title="Contract-based flows" icon="link" href="/automation/contract-based-flows">
+        React to mints, swaps, approvals, and liquidations.
+      </Card>
+      <Card title="Docs MCP server" icon="robot" href="/api/mcp">
+        Connect these docs to Claude, Cursor, or VS Code.
+      </Card>
+    </Columns>
+  </div>
+</div>
 
-1. Review the platform overview and workspace model.
-2. Configure sender, domain, and branding settings.
-3. Connect the contract, wallet, or product events needed for your first workflow.
-4. Create a small test segment, campaign, or automation and validate it end to end.
+<div className="px-4 pb-24 max-w-4xl mx-auto text-center">
+  <hr className="os-hero-rule mb-12" />
+  <h2 className="text-xl font-semibold tracking-tight">Wallet-first, by design</h2>
+  <p className="mt-4 text-gray-500 dark:text-zinc-400">
+    The wallet is the canonical user record. Email is optional, and so is every other
+    identifier — which means you can reach someone who has never given you an address,
+    and still measure whether it worked.
+  </p>
+</div>

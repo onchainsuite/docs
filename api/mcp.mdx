@@ -1,0 +1,102 @@
+---
+title: "MCP Server"
+description: "Connect the Onchain Suite documentation to Claude, Cursor, or VS Code so your AI assistant can answer from these docs."
+---
+
+These docs are published with a built-in [Model Context Protocol](https://modelcontextprotocol.io) server. Connect it to an AI assistant and it can search this documentation directly instead of guessing from training data.
+
+<Note>
+This server exposes **the documentation**. It does not read your workspace, contacts, campaigns, or any account data. To work with your own data programmatically, use the [API](/api/overview).
+</Note>
+
+## Server URL
+
+```
+https://docs.onchainsuite.com/mcp
+```
+
+The transport is HTTP. No API key or account is required — the docs are public.
+
+## Connect it
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash
+    claude mcp add --transport http onchain-suite-docs https://docs.onchainsuite.com/mcp
+    ```
+  </Tab>
+
+  <Tab title="Claude">
+    Open **Settings → Connectors → Add custom connector**, then enter a name and the server URL above.
+  </Tab>
+
+  <Tab title="Cursor">
+    Add to your `mcp.json`:
+
+    ```json
+    {
+      "mcpServers": {
+        "onchain-suite-docs": {
+          "url": "https://docs.onchainsuite.com/mcp"
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="VS Code">
+    Add to `.vscode/mcp.json`:
+
+    ```json
+    {
+      "servers": {
+        "onchain-suite-docs": {
+          "type": "http",
+          "url": "https://docs.onchainsuite.com/mcp"
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## What it can do
+
+| Tool | Purpose |
+| --- | --- |
+| Search | Find relevant documentation and return snippets with links |
+| Browse | Navigate the docs as a filesystem to read specific pages in full |
+| Feedback | Report a page that's wrong or out of date |
+
+## Worth asking it
+
+Once connected, questions that used to mean digging through reference tables work directly:
+
+- "What columns are on `contact_360`, and which are nullable?"
+- "Write me a SQL query for high-value wallets that have gone quiet."
+- "Which automation trigger fires on a first mint, and what filter does it use?"
+- "Show me how to send a custom event with an idempotency key."
+- "Why would `deliveredNow` be false on an in-app push?"
+
+Because the assistant reads the actual reference tables, it won't invent column names or trigger types — the failure mode these docs exist to prevent.
+
+## Reading a single page
+
+Every page can also be pulled directly without MCP. Use the contextual menu at the top of any page to copy it as Markdown, open it in an assistant, or copy the MCP server URL.
+
+You can also append `.md` to any docs URL to get the raw Markdown source:
+
+```
+https://docs.onchainsuite.com/api/sql-schema.md
+```
+
+That's often the fastest way to hand one specific page to an assistant without configuring anything.
+
+## The Onchain Suite API is not an MCP server
+
+Worth stating plainly, because the naming invites confusion:
+
+- **These docs** publish an MCP server, at the URL above.
+- **The Onchain Suite API** is a REST API. It does not expose an MCP endpoint. See [API Overview](/api/overview) and [Authentication](/api/authentication).
+
+If you want an AI agent to act on your data, point it at the REST API with a secret key — the same surface described throughout the [developer docs](/api/overview).
