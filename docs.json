@@ -144,6 +144,7 @@
             "pages": [
               "api/overview",
               "api/authentication",
+              "api/domains",
               "api/webhooks",
               "api/rate-limits",
               "api/sql-schema",
