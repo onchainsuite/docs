@@ -1,0 +1,203 @@
+---
+title: "Wallet Enrichment"
+description: "Turn a bare wallet address into a rich profile — portfolio value, activity, NFT holdings, and derived engagement and value scores."
+---
+
+Give Onchain Suite a wallet address and it fetches that wallet's on-chain history, normalizes it, and derives the metrics you actually segment and message on: portfolio value, recent activity, NFT holdings, an engagement score, and an estimated lifetime value.
+
+Enrichment is what makes a wallet-first audience useful. A raw address tells you nothing; an enriched profile tells you whether this is a dormant whale, an active minter, or a wallet worth a win-back.
+
+## What you get
+
+Enrichment writes three datasets, all queryable in the [SQL editor](/api/sql-schema) and joined together in [`contact_360`](/api/sql-schema#contact_360).
+
+<Tabs>
+  <Tab title="Wallet metrics">
+    One row per wallet in `user_onchain_metrics`:
+
+    | Field | Meaning |
+    | --- | --- |
+    | `portfolio_value_usd` | Total portfolio value in USD |
+    | `volume_last_90d` | Traded volume in the last 90 days |
+    | `transaction_count_90d` | Transactions in the last 90 days |
+    | `total_token_count` | Distinct token balances held |
+    | `nft_collection_count` | Distinct NFT collections |
+    | `nft_item_count` | Total NFT items |
+    | `engagement_score` | Derived 0–100 activity score |
+    | `est_ltv` | Derived estimated lifetime value (USD) |
+    | `primary_chain` | Chain this wallet was enriched on |
+    | `last_enriched_at` | When enrichment last ran |
+  </Tab>
+
+  <Tab title="Activity summary">
+    One row per wallet **per chain** in `wallet_activity_summary`:
+
+    | Field | Meaning |
+    | --- | --- |
+    | `transaction_count` | Total transactions |
+    | `volume_usd` | Total traded volume |
+    | `active_days_30d` / `active_days_90d` | Distinct active days in the window |
+    | `first_activity_at` / `last_activity_at` | Activity bounds |
+  </Tab>
+
+  <Tab title="NFT holdings">
+    One row per token in `nft_holdings` (capped at 250 per wallet):
+
+    | Field | Meaning |
+    | --- | --- |
+    | `collection_name` / `contract_address` | The collection |
+    | `item_name` / `token_id` | The specific token |
+    | `floor_price_quote` | Floor price in USD |
+    | `image_url` | Token image |
+    | `last_transferred_at` | Last transfer time |
+  </Tab>
+</Tabs>
+
+## Derived scores
+
+Two fields are computed rather than fetched. Both are heuristics — useful for ranking and segmentation, not accounting.
+
+### Engagement score (0–100)
+
+A weighted blend of recent activity, capped so no single signal dominates:
+
+| Component | Contribution | Cap |
+| --- | --- | --- |
+| Transactions (90d) | `× 2` | 40 |
+| Active days (30d) | `× 2` | 30 |
+| NFT collections | `× 3` | 15 |
+| Portfolio value | `÷ 1000` | 15 |
+
+A wallet with 20+ transactions, activity most days, a few collections, and a five-figure portfolio approaches 100. A dormant wallet trends toward zero.
+
+### Estimated LTV
+
+A weighted blend biased toward realized value:
+
+```
+est_ltv = portfolio_value_usd × 0.08
+        + volume_last_90d     × 0.03
+        + engagement_score    × 5
+        + nft_collection_count × 20
+```
+
+<Note>
+`churn_risk` is **not** an enrichment field — it's derived at query time in `contact_360` from `last_activity_at`: `low` within 30 days, `medium` at 30–60, `high` beyond 60. Enrichment supplies the activity timestamps that drive it.
+</Note>
+
+## Supported chains
+
+Enrichment pulls from [GoldRush](https://goldrush.dev) (Covalent).
+
+**EVM mainnets:** `eth-mainnet`, `base-mainnet`, `matic-mainnet`, `bsc-mainnet`, `arbitrum-mainnet`, `optimism-mainnet`, `sei-mainnet`. **Solana:** `solana-mainnet`. Testnets including `eth-sepolia`, `base-sepolia-testnet`, and `solana-devnet` are also supported.
+
+A wallet is enriched per chain, so metrics reflect the chain you enriched it on. Enrich the same wallet on multiple chains to build a cross-chain picture — activity summaries are stored per chain.
+
+## When enrichment runs
+
+<Steps>
+  <Step title="On profile view (automatic)">
+    Opening a contact profile that has a wallet triggers enrichment if it's never been enriched or is **more than 7 days stale**. This keeps active profiles fresh without any work from you.
+  </Step>
+  <Step title="On project-settings save (automatic)">
+    Saving project settings that include contract addresses enriches the holders of those contracts in the background.
+  </Step>
+  <Step title="On demand (API)">
+    Enqueue enrichment for a specific wallet, your contacts, or a contract's holders — see below.
+  </Step>
+</Steps>
+
+There is no fixed re-enrichment schedule — freshness is driven by the 7-day staleness check on view. Force a refresh any time with `forceRefresh`.
+
+## Enriching on demand
+
+These are session-authenticated dashboard endpoints (send your session plus `x-org-id`), and require `OWNER`, `ADMIN`, or `EDITOR`. Base path `https://api.onchainsuite.com/api/v1`.
+
+### One wallet
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/wallets/enqueue \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "walletAddress": "0xabc...", "chain": "base-mainnet" }'
+```
+
+Returns either `{ "queued": true, "jobId": "…" }` when a queue is available, or `{ "queued": false, "result": { … } }` when it ran inline. Pass `"forceRefresh": true` to bypass the cache.
+
+### Wait for the result
+
+When you need the metrics back in the same request, use the blocking variant. It polls until the wallet's `last_enriched_at` advances or it times out.
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/wallets/enqueue-and-wait \
+  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
+  -d '{ "walletAddress": "0xabc...", "chain": "base-mainnet", "timeoutMs": 8000 }'
+```
+
+Returns `{ "ready": true, "metric": { … } }`, or `ready: false` if it didn't finish within the timeout (clamped to 1–25 seconds). The job keeps running either way.
+
+### Your contacts, or a contract's holders
+
+| Endpoint | Enriches |
+| --- | --- |
+| `POST /intelligence/query/enrichment/contacts/enqueue` | The wallets of your most recently updated contacts (up to 200) |
+| `POST /intelligence/query/enrichment/protocol` | The holders of your configured contracts |
+
+### Check status
+
+```bash
+curl https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/status \
+  -H "x-org-id: $ORG_ID"
+```
+
+Returns the count of enriched wallets, the most recent `lastEnrichedAt`, live queue counts, and an `idle` flag that's `true` once the queue has drained.
+
+Read a single wallet's stored metrics directly with `GET /intelligence/query/enrichment/wallets/{walletAddress}` (404 if it's never been enriched).
+
+## Cost and limits
+
+Enrichment consumes **GoldRush credits** — roughly 4 per wallet (it makes four data calls: balances, transactions, NFTs, and portfolio). Credits are a monthly allowance that scales with your plan:
+
+| Plan | Monthly GoldRush credits |
+| --- | --- |
+| Free / Launch | 10,000 |
+| Starter | 20,000 |
+| Growth | 75,000 |
+| Pro | 200,000 |
+| Pro Plus | 500,000 |
+
+At ~4 credits per wallet, the free tier covers roughly 2,500 wallet enrichments a month. Exhausting the allowance returns `402 CREDITS_EXCEEDED`; the SQL editor and existing data keep working.
+
+Responses are cached per organization — 5 minutes for transactions, 10 for balances and portfolio, 15 for NFTs — so repeated enrichment of the same wallet within those windows is served from cache and doesn't re-spend credits (unless you pass `forceRefresh`).
+
+## Using enriched data
+
+<CardGroup cols={2}>
+  <Card title="Query it in SQL" icon="table" href="/api/sql-schema">
+    `user_onchain_metrics`, `wallet_activity_summary`, `nft_holdings`, and the joined `contact_360` view.
+  </Card>
+  <Card title="Build audiences" icon="filter" href="/intelligence/sql-query-editor">
+    Whales, dormant holders, high-LTV wallets — save any query as a segment.
+  </Card>
+  <Card title="Score and prioritize" icon="chart-line" href="/audience/health-and-churn">
+    Engagement score feeds contact health and churn signals.
+  </Card>
+  <Card title="Personalize messages" icon="pen-to-square" href="/campaigns/email-editor">
+    Reference wallet traits as merge variables in campaigns.
+  </Card>
+</CardGroup>
+
+The most common starting point is a query against `contact_360`, where enrichment is already joined to identity and email engagement:
+
+```sql
+-- Dormant whales worth a win-back
+SELECT email, wallet_address, portfolio_value_usd, days_since_last_activity
+FROM contact_360
+WHERE portfolio_value_usd > 10000
+  AND churn_risk IN ('medium', 'high')
+ORDER BY est_ltv DESC NULLS LAST
+LIMIT 100
+```
+
+<Note>
+Campaign merge variables for on-chain fields (like `portfolioValueUsd`) render from contact metadata, not directly from the enrichment tables. The enrichment tables feed **analytics and segmentation** through `contact_360`; for per-recipient personalization, the value needs to be present in the contact's metadata.
+</Note>

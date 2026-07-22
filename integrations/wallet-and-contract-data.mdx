@@ -1,15 +1,39 @@
 ---
 title: "Wallet and Contract Data"
-description: "Connect the wallet and contract data that powers audience logic and Web3-native automations."
+description: "The on-chain and off-chain signals that power audiences, personalization, and Web3-native automations."
 ---
 
-## Common Inputs
+Onchain Suite works from two kinds of signal: what wallets do **on-chain**, which the platform observes for you, and what users do **in your product**, which you send in. Together they make a wallet into a profile you can segment and message.
 
-- Wallet connection state
-- Contract interactions
-- Token or asset ownership signals
-- Normalized protocol events
+## On-chain data
 
-## Recommendation
+Point Onchain Suite at a wallet and it pulls that wallet's on-chain history from [GoldRush](https://goldrush.dev) — portfolio value, transaction activity, and NFT holdings — then derives engagement and value scores. This is [wallet enrichment](/audience/wallet-enrichment), and it's what turns a bare address into something worth targeting.
 
-Start with the data needed for one high-value workflow, then expand once the first audience or automation is working well.
+<Card title="Wallet enrichment" icon="wand-magic-sparkles" href="/audience/wallet-enrichment" horizontal>
+  Fields, derived scores, supported chains, when it runs, and the on-demand API.
+</Card>
+
+Contract activity — mints, swaps, approvals, liquidations — is available as automation triggers, normalized into a consistent shape across chains. See [Contract-Based Flows](/automation/contract-based-flows).
+
+## Off-chain data
+
+Anything your own product knows — signups, deposits, plan changes, support events — you send in as [custom events](/integrations/custom-events). These become queryable alongside on-chain data, feed segments, and trigger automations.
+
+<Card title="Custom events" icon="signal-stream" href="/integrations/custom-events" horizontal>
+  Send product events, resolve them to contacts, and drive in-app or email from them.
+</Card>
+
+## How the signals combine
+
+| Signal | Source | Powers |
+| --- | --- | --- |
+| Portfolio, activity, NFTs | On-chain, enriched from GoldRush | Segments, scoring, analytics |
+| Contract events | On-chain, observed | Automation triggers |
+| Custom events | Your backend | Triggers, segments, SQL |
+| Identity (wallet, email, external ID) | You, on ingest | Ties every signal to one contact |
+
+Everything resolves to a single wallet-first contact, so a query or automation can combine "holds this NFT", "swapped last week", and "upgraded their plan yesterday" in one audience.
+
+## Where to start
+
+Start with the data for **one** high-value workflow, prove it end to end, then expand. A first useful loop is usually: enrich a set of wallets, build a segment from the result in [SQL](/intelligence/sql-query-editor), and send them a campaign or automation.

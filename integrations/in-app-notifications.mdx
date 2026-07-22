@@ -55,12 +55,17 @@ The in-app allowlist is separate from the API's CORS allowlist. Your origin must
 
 The fastest path is the official browser SDK — it handles the challenge/verify handshake, the socket lifecycle, reconnection, delivery reporting, and an optional toast UI.
 
+<Tip>
+As of **v0.2.0** the SDK bundles `socket.io-client`, so `npm i @onchainsuite/sdk` is all you need — no second install. (Older docs told you to add `socket.io-client` separately; that's no longer required on the npm path.)
+</Tip>
+
 <CodeGroup>
 ```bash npm
-npm i @onchainsuite/sdk socket.io-client
+npm i @onchainsuite/sdk
 ```
 
 ```html CDN
+<!-- On the CDN path, load socket.io-client first so the SDK finds window.io -->
 <script src="https://cdn.socket.io/4.8.3/socket.io.min.js"></script>
 <script type="module">
   import { OnchainSuite } from "https://esm.sh/@onchainsuite/sdk";
@@ -73,7 +78,11 @@ npm i @onchainsuite/sdk socket.io-client
 ```
 </CodeGroup>
 
-`socket.io-client` is an optional peer dependency. The SDK finds it via `window.io`, a dynamic import, or an explicit `ioClient` option.
+<Note>
+The two paths differ: on the **npm/bundler path** the bundled `socket.io-client` is pulled in automatically — nothing else to install. On the **CDN script-tag path** a raw `esm.sh` import can't provide the bundled copy, so you still load `socket.io-client` first (the SDK finds it on `window.io`). You can also inject your own client with the `ioClient` option.
+</Note>
+
+The SDK is ESM-only and tree-shakeable.
 
 ### Simplest integration
 
@@ -157,8 +166,8 @@ os.report(notification, "clicked");
   API origin **without** the `/api/v1` suffix — e.g. `https://api.onchainsuite.com`.
 </ParamField>
 
-<ParamField path="options.signMessage" type="(message: string) => Promise<string>">
-  Custom signer. Defaults to `personal_sign` via `window.ethereum`.
+<ParamField path="options.signMessage" type="(message: string, walletAddress: string) => Promise<string>">
+  Custom signer, receiving the challenge message and the wallet address. Defaults to `personal_sign` via `window.ethereum`.
 </ParamField>
 
 <ParamField path="options.provider" type="EIP1193Provider">
@@ -169,13 +178,19 @@ os.report(notification, "clicked");
   Toast configuration, or `false` to disable the built-in UI.
 </ParamField>
 
-<ParamField path="options.onNotification" type="(n) => boolean | void">
-  Called per notification. Return `false` to suppress the built-in toast.
+<ParamField path="options.onNotification" type="(n, actions) => boolean | void">
+  Called per notification. Return `false` to suppress the built-in toast. `actions` provides `report(type)`, `click()`, and `dismiss()`.
+</ParamField>
+
+<ParamField path="options.ioClient" type="io factory">
+  Inject your own `socket.io-client` instead of the bundled one — useful on the CDN path or to pin a version.
 </ParamField>
 
 <ParamField path="options.debug" type="boolean">
   Verbose console logging.
 </ParamField>
+
+You can also construct the client with `createClient(publishableKey, options)`, a functional alias for `new OnchainSuite(...)`.
 
 **Display defaults:** `position: "bottom-right"`, `accent: "#6d5efc"`, `background: "#111318"`, `foreground: "#f5f6f8"`, `duration: 8000` (use `0` for sticky), `maxVisible: 3`, `zIndex: 2147483000`.
 
@@ -475,6 +490,10 @@ There is no bulk endpoint on the secret-key API — loop `/inapp/push` per walle
 - **Automations** — add a `send_inapp` step and let the workflow resolve the audience.
 
 To preview reach before sending, query your segment with `?reachable_on=inapp`.
+
+<Tip>
+To trigger a push from something that happens in **your product** — a signup, a deposit, a status change — send a [custom event](/integrations/custom-events) and let an automation turn it into a push. See the [end-to-end walkthrough](/integrations/custom-events#end-to-end-notify-a-user-from-an-offchain-event).
+</Tip>
 
 ## Limits and quotas
 

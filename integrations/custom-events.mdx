@@ -199,6 +199,105 @@ Available alongside your payload keys: `event`, `contactId`, `walletAddress`, `e
 
 Operators are `eq`, `neq`, `in`, `contains`, and `exists` — the same set used by on-chain triggers, and all filters must pass. See [Triggers and Conditions](/automation/triggers-and-conditions) for the details, including the note that unrecognized operators are silently dropped.
 
+## End-to-end: notify a user from an offchain event
+
+This is the most common reason to send custom events — something happens in your product, and you want the user to see an in-app notification in your dApp. Here's the whole path, and how to wire it up.
+
+```mermaid
+flowchart LR
+  A[Your backend<br/>POST /events] --> B[app_events]
+  B --> C[Automation<br/>app_event trigger]
+  C --> D[send_inapp node]
+  D --> E[In-app push]
+  E --> F[SDK in your dApp<br/>PUSH event]
+```
+
+There is **no direct event-to-push shortcut** — an automation is always the bridge. That's a feature: it means the same event can fan out to in-app, email, tags, and webhooks without your backend knowing about any of them.
+
+<Steps>
+  <Step title="Add the in-app SDK to your dApp">
+    Follow the [in-app notifications quickstart](/integrations/in-app-notifications#quickstart-with-the-sdk). Two lines authenticate the wallet and open the socket:
+
+    ```ts
+    import { OnchainSuite } from "@onchainsuite/sdk";
+
+    const os = new OnchainSuite("pk_live_yourorg_xxx", {
+      apiBaseUrl: "https://api.onchainsuite.com",
+    });
+    await os.start(); // wallet signs in, notifications start showing
+    ```
+  </Step>
+
+  <Step title="Build an automation: app_event trigger → send_inapp">
+    Create an automation whose trigger is your event and whose only action sends an in-app push. See [Create an Automation](/automation/create-an-automation).
+
+    ```json
+    {
+      "triggerSpec": { "type": "app_event", "event": "first_deposit" },
+      "graph": {
+        "nodes": [
+          { "id": "t1", "type": "app_event",
+            "data": { "actionType": "app_event", "event": "first_deposit" } },
+          { "id": "n1", "type": "send_inapp",
+            "data": {
+              "actionType": "send_inapp",
+              "recipientMode": "triggering_profile",
+              "title": "Deposit received",
+              "body": "Your first deposit is in. Welcome aboard."
+            } }
+        ],
+        "edges": [ { "id": "e1", "source": "t1", "target": "n1" } ]
+      }
+    }
+    ```
+
+    `recipientMode: "triggering_profile"` sends to the contact the event resolved to — you don't specify a wallet on the node.
+  </Step>
+
+  <Step title="Activate AND publish it">
+    Both are required. An active-but-unpublished automation matches your event and creates an entry, but runs an empty graph and sends nothing. See the [publish step](/automation/create-an-automation).
+  </Step>
+
+  <Step title="Fire the event from your backend">
+    ```bash
+    curl -X POST https://api.onchainsuite.com/api/v1/events \
+      -H "Authorization: Bearer sk_live_…" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "event": "first_deposit",
+        "contact": { "walletAddress": "0xabc..." },
+        "payload": { "amountUsd": 250 }
+      }'
+    ```
+
+    If a socket is connected for that wallet, the push arrives in about a second. If not, it's stored and replayed the next time the wallet connects.
+  </Step>
+</Steps>
+
+### The wallet is the key
+
+The in-app SDK authenticates by **wallet**, so the push can only reach a wallet. This is the one requirement that catches people out:
+
+<Warning>
+The event must resolve to a contact **with a wallet address** — either send `contact.walletAddress` directly, or send an `email`/`externalId` that matches a contact who already has a wallet on file.
+
+If the resolved contact has no wallet, the `send_inapp` step fails for that entry (and eventually dead-letters) rather than delivering. An email-only signup, for example, can't receive an in-app push until that contact is linked to a wallet.
+</Warning>
+
+The wallet is taken from the event's `contact.walletAddress` if present, otherwise from the matched contact record. To also reach walletless contacts, branch the automation to a `send_email` step — see [Connect to Campaigns](/automation/connect-to-campaigns).
+
+### Offchain vs onchain triggers
+
+Both drive the same actions, including `send_inapp`. The difference is where the event comes from:
+
+| | `app_event` (offchain) | `onchain_event` |
+| --- | --- | --- |
+| Source | Your backend, via `POST /events` | Chain activity, observed for you |
+| You supply | Event name, identifiers, payload | Nothing — the chain does |
+| Use it for | Signups, deposits, product state | Mints, swaps, approvals, liquidations |
+
+Reach for `app_event` when the thing that happened lives in your systems. Reach for `onchain_event` when it's something the chain already knows — see [Contract-Based Flows](/automation/contract-based-flows).
+
 ## Querying events in SQL
 
 Events land in the `app_events` table in the [Intelligence SQL editor](/intelligence/sql-query-editor):

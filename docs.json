@@ -70,6 +70,7 @@
             "pages": [
               "audience/overview",
               "audience/unified-profiles",
+              "audience/wallet-enrichment",
               "audience/segments",
               "audience/imports-and-exports",
               "audience/health-and-churn"
