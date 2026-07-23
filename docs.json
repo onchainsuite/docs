@@ -146,6 +146,7 @@
               "api/overview",
               "api/authentication",
               "api/domains",
+              "api/automation-triggers",
               "api/webhooks",
               "api/rate-limits",
               "api/sql-schema",

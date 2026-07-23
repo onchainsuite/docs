@@ -1,0 +1,204 @@
+---
+title: "Automation Trigger API"
+description: "Push trigger events into Onchain Suite from your own indexer or backend to start automations."
+---
+
+Onchain Suite observes on-chain activity for you, but when you run your own indexer — or you need to trigger automations from something the platform can't see — you can post trigger events directly.
+
+Each request is matched against your active, published automations. Every automation whose trigger spec matches creates an entry and starts running.
+
+<Note>
+For product events from your own application (signups, deposits, plan changes), use [Custom Events](/integrations/custom-events) instead. That path resolves contacts for you and is the right tool for off-chain behavior. This API is for feeding **trigger events** — chain activity and lifecycle signals — straight into the automation runtime.
+</Note>
+
+## Authentication
+
+Server-to-server with a secret key. The organization is derived from the key, so no `x-org-id` header is needed.
+
+```
+Authorization: Bearer sk_live_…
+```
+
+Base path: `https://api.onchainsuite.com/api/v1/v2/automations/runtime`
+
+<Warning>
+Secret keys must never appear in client-side code. See [Authentication](/api/authentication).
+</Warning>
+
+## Response
+
+Every trigger endpoint returns the same shape:
+
+```json
+{
+  "matchedAutomations": 1,
+  "entries": [
+    {
+      "automationId": "…",
+      "entryId": "…",
+      "queued": true,
+      "duplicate": false
+    }
+  ]
+}
+```
+
+`matchedAutomations: 0` means nothing matched. Check, in order: the automation is **active**, it has been **published**, and your chain slug, contract address, and event name match the trigger spec exactly.
+
+`duplicate: true` means an entry already exists for this event — see [Deduplication](#deduplication).
+
+## Endpoints
+
+### On-chain event
+
+`POST /triggers/onchain-event`
+
+<ParamField path="chain" type="string" required>
+  Chain slug, e.g. `base-mainnet`.
+</ParamField>
+
+<ParamField path="event" type="string" required>
+  Event name, e.g. `Transfer`.
+</ParamField>
+
+<ParamField path="walletAddress" type="string">
+  The subject wallet. When omitted, it's extracted from the payload based on event kind.
+</ParamField>
+
+<ParamField path="contractAddress" type="string">
+  The contract the event came from.
+</ParamField>
+
+<ParamField path="txHash" type="string">
+  Transaction hash. Strongly recommended — it backs deduplication.
+</ParamField>
+
+<ParamField path="sourceEventId" type="string">
+  Your own dedup key. Overrides the derived one.
+</ParamField>
+
+<ParamField path="payload" type="object">
+  Event data. Keys are addressable from trigger filters.
+</ParamField>
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/v2/automations/runtime/triggers/onchain-event \
+  -H "Authorization: Bearer sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "chain": "base-mainnet",
+    "event": "Transfer",
+    "contractAddress": "0xYourCollection",
+    "walletAddress": "0xRecipient",
+    "txHash": "0xabc...",
+    "sourceEventId": "0xabc...:12",
+    "payload": {
+      "from": "0x0000000000000000000000000000000000000000",
+      "to": "0xRecipient",
+      "tokenId": "1234"
+    }
+  }'
+```
+
+### GoldRush-decoded event
+
+`POST /triggers/goldrush-event`
+
+For events already decoded against the GoldRush catalog. Processed synchronously. Every field is optional — the platform resolves the canonical event from whatever you supply, preferring `topic0`, then Solana program plus instruction, then the event name.
+
+Accepts `chain`, `walletAddress`, `contractAddress`, `event`, `txHash`, `sourceEventId`, `topic0`, `programId`, `instructionName`, `payload`, and `goldrush`.
+
+### Queued and batch variants
+
+For sustained volume, prefer these over the synchronous endpoint.
+
+| Endpoint | Use |
+| --- | --- |
+| `POST /triggers/goldrush-event/queue` | One event, queued. Also accepts `sourceId`. |
+| `POST /triggers/goldrush-events/batch` | Many events in one request. |
+
+Batch takes `{ "sourceId": "…", "events": [ … ] }` where each entry has the same shape as a single GoldRush event. Both return a queued acknowledgement — `mode`, `accepted`, `queued`, and per-event results for batch — rather than the match result, since matching happens after the response.
+
+```bash
+curl -X POST https://api.onchainsuite.com/api/v1/v2/automations/runtime/triggers/goldrush-events/batch \
+  -H "Authorization: Bearer sk_live_…" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "sourceId": "my-indexer",
+    "events": [
+      { "chain": "base-mainnet", "event": "Transfer", "txHash": "0xaaa...", "walletAddress": "0x111..." },
+      { "chain": "base-mainnet", "event": "Transfer", "txHash": "0xbbb...", "walletAddress": "0x222..." }
+    ]
+  }'
+```
+
+### Lifecycle triggers
+
+These three fire automations whose trigger types are `segment_entered`, `email_opened`, and `health_threshold`. The platform does not emit them on its own — post them when the corresponding thing happens in your systems.
+
+<AccordionGroup>
+  <Accordion title="POST /triggers/segment-entered" icon="filter">
+    Requires `segmentId`. Identify the contact with any of `contactId`, `email`, or `walletAddress`. Also accepts `sourceEventId` and `payload`.
+
+    ```json
+    { "segmentId": "seg_base_minters", "walletAddress": "0xabc..." }
+    ```
+  </Accordion>
+
+  <Accordion title="POST /triggers/email-opened" icon="envelope-open">
+    Accepts `campaignId`, `deliveryId`, `contactId`, `email`, `walletAddress`, `sourceEventId`, and `payload`. Supply `campaignId` or `deliveryId` so the open can be attributed.
+
+    ```json
+    { "campaignId": "cmp_launch", "email": "user@example.com" }
+    ```
+  </Accordion>
+
+  <Accordion title="POST /triggers/health-threshold" icon="heart-pulse">
+    Requires a numeric `score`. Identify the contact with `contactId`, `email`, or `walletAddress`. Also accepts `sourceEventId` and `payload`.
+
+    ```json
+    { "score": 25, "walletAddress": "0xabc..." }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Deduplication
+
+Each event produces one entry per matching automation, keyed by `sourceEventId`. Repeating the same key returns `duplicate: true` and does not re-enter the automation.
+
+When you don't supply `sourceEventId`, one is derived:
+
+| Trigger | Derived key |
+| --- | --- |
+| On-chain | `onchain:<chain>:<txHash>` |
+| Segment entered | `segment:<segmentId>:<contact>` |
+| Email opened | `email_opened:<campaignId>:<delivery>` |
+| Health threshold | `health_threshold:<contact>:<score>` |
+
+<Warning>
+**Always send `txHash` on on-chain events.** Without it — and without an explicit `sourceEventId` — the derived key falls back to random bytes, so a retried or re-delivered event creates a duplicate entry and your users get messaged twice.
+
+Send an explicit `sourceEventId` such as `<txHash>:<logIndex>` when one transaction should legitimately produce several distinct entries.
+</Warning>
+
+A contact can only enter a `segment_entered` automation **once, ever**, because the derived key contains no time component. For repeatable entry, send a `sourceEventId` that varies per occurrence.
+
+## Requirements for a match
+
+<Steps>
+  <Step title="The automation is active">
+    Paused, draft, and archived automations are never matched.
+  </Step>
+  <Step title="The automation is published">
+    An active-but-unpublished automation matches your event and creates an entry, then runs an empty graph and does nothing. This is the most common cause of "it matched but nothing happened".
+  </Step>
+  <Step title="The trigger spec agrees">
+    Any field you set on the trigger — chain, contract, event names, `topic0`, filters — must match. Unset fields are wildcards.
+  </Step>
+</Steps>
+
+See [Triggers and Conditions](/automation/triggers-and-conditions) for the full trigger catalog and filter operators, and [Contract-Based Flows](/automation/contract-based-flows) for how events are normalized before matching.
+
+## Session-authenticated variant
+
+The same trigger endpoints exist under `/api/v1/automations/runtime/...` using a session plus `x-org-id` instead of a secret key. Bodies and responses are identical. Use the `v2` secret-key path for server-to-server integrations; the session path exists for dashboard-driven testing.
