@@ -55,10 +55,6 @@ The in-app allowlist is separate from the API's CORS allowlist. Your origin must
 
 The fastest path is the official browser SDK — it handles the challenge/verify handshake, the socket lifecycle, reconnection, delivery reporting, and an optional toast UI.
 
-<Tip>
-As of **v0.2.0** the SDK bundles `socket.io-client`, so `npm i @onchainsuite/sdk` is all you need — no second install. (Older docs told you to add `socket.io-client` separately; that's no longer required on the npm path.)
-</Tip>
-
 <CodeGroup>
 ```bash npm
 npm i @onchainsuite/sdk

@@ -18,15 +18,9 @@ Only **organization templates** can be attached to a campaign or referenced by a
 
 ## Attaching one
 
-```bash
-curl -X PUT https://api.onchainsuite.com/api/v1/campaigns/$ID/template \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "templateId": "tpl_welcome" }'
-```
+Attach an organization template to a campaign, or detach it to go back to standalone content.
 
-The template must belong to your organization or the request returns 404. Send `null` to detach.
-
-Template content is the **lowest** precedence at render time: an explicit request override wins, then content stored on the campaign, then the template. So editing a campaign's body detaches it from the template's content in practice — the template is a starting point, not a live link.
+Template content has the **lowest** precedence at render time: content stored on the campaign wins over the template. So editing a campaign's body effectively detaches it from the template — a template is a starting point, not a live link. Changing the template later won't update campaigns already built from it.
 
 ## In-app templates
 

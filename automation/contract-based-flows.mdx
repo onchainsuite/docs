@@ -1,6 +1,6 @@
 ---
 title: "Contract-Based Flows"
-description: "React to normalized smart contract activity — configure on-chain triggers and feed events in over the API."
+description: "React to normalized smart contract activity — configure on-chain triggers that fire on mints, swaps, approvals, and liquidations."
 ---
 
 Contract-based flows respond to what wallets actually do on-chain: minting, swapping, borrowing, approving, getting liquidated. Events are normalized into a consistent shape before matching, so a `Transfer` on Base and an SPL transfer on Solana both land as something your trigger can match.
@@ -42,69 +42,15 @@ Common aliases are normalized for you — `ethereum`, `eth`, and `1` all become 
 
 ### Event catalog
 
-The platform recognizes 29 event definitions across standards. Fetch the full catalog from `GET /api/v1/automations/builder/onchain/catalog`.
+The platform recognizes 29 event definitions across standards, browsable in the trigger picker when you build an automation.
 
 **EVM** — ERC-20 (`erc20_transfer`, `erc20_approval`), ERC-721 (`erc721_transfer`, `erc721_approval`, `erc721_approval_for_all`), ERC-1155 (`erc1155_transfer_single`, `erc1155_transfer_batch`, `erc1155_approval_for_all`), ERC-4626 (`erc4626_deposit`, `erc4626_withdraw`), governance (`governance_proposal_created`, `governance_vote_cast`), and DeFi (`defi_swap`, `defi_mint`, `defi_burn`, `defi_deposit`, `defi_withdraw`, `defi_borrow`, `defi_repay`, `defi_liquidation`, `defi_claim_rewards`).
 
 **Solana** — `solana_spl_transfer`, `solana_nft_mint`, `solana_nft_transfer`, `solana_dex_swap`, `solana_deposit`, `solana_withdraw`, `solana_anchor_event`.
 
-## Sending events in
+## Feeding in your own events
 
-To drive automations from your own indexer or backend, post events to the ingest API with a secret key. The organization is derived from the key.
-
-```bash
-curl -X POST https://api.onchainsuite.com/api/v1/v2/automations/runtime/triggers/onchain-event \
-  -H "Authorization: Bearer sk_live_…" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "chain": "base-mainnet",
-    "event": "Transfer",
-    "contractAddress": "0xYourCollection",
-    "walletAddress": "0xRecipient",
-    "txHash": "0xabc...",
-    "sourceEventId": "0xabc...:12",
-    "payload": {
-      "from": "0x0000000000000000000000000000000000000000",
-      "to": "0xRecipient",
-      "tokenId": "1234"
-    }
-  }'
-```
-
-Response:
-
-```json
-{
-  "matchedAutomations": 1,
-  "entries": [
-    { "automationId": "...", "entryId": "...", "queued": true, "duplicate": false }
-  ]
-}
-```
-
-`matchedAutomations: 0` means no active, published automation matched — check the chain slug, contract address, and event name first.
-
-### Endpoints
-
-All accept `Authorization: Bearer sk_…` and return the same response shape.
-
-| Path (under `/api/v1/v2/automations/runtime`) | Use |
-| --- | --- |
-| `/triggers/onchain-event` | Generic on-chain event |
-| `/triggers/goldrush-event` | Indexed event, processed immediately |
-| `/triggers/goldrush-event/queue` | Same, queued for throughput |
-| `/triggers/goldrush-events/batch` | Many events in one request |
-| `/triggers/segment-entered` | Contact joined a segment |
-| `/triggers/email-opened` | Recipient opened a campaign |
-| `/triggers/health-threshold` | Health score crossed a line |
-
-Batch requests take `{ "sourceId": "...", "events": [ ... ] }` and return per-event results. Prefer the queued and batch variants for sustained volume — the synchronous endpoint processes inline.
-
-<Warning>
-**Always send `txHash`.** Deduplication keys off `sourceEventId`, and when you omit it for an on-chain event the fallback key is derived from `txHash`. With neither, the key is random — so a retried or re-delivered event creates a duplicate entry and your users get the message twice.
-
-Send an explicit `sourceEventId` (something like `<txHash>:<logIndex>`) when one transaction can legitimately produce several distinct entries.
-</Warning>
+If you run your own indexer, or the activity you care about happens off-chain, you can send events in yourself rather than relying on what the platform observes. See [Custom Events](/integrations/custom-events) for the integration.
 
 ## How events are normalized
 
@@ -115,7 +61,7 @@ Before matching, every event is rewritten into a canonical shape.
 **Addresses are validated by chain family.** EVM addresses must match `0x` plus 40 hex characters and are lowercased; Solana addresses must be valid base58 of 32–44 characters.
 
 <Warning>
-A malformed address becomes `null` rather than raising an error. If your trigger scopes to a contract address, a typo means it silently never matches. Verify with `/automations/{id}/preview` before publishing.
+A malformed address is discarded rather than raising an error. If your trigger scopes to a contract address, a typo means it silently never matches. Preview the trigger before publishing.
 </Warning>
 
 **The subject wallet** — the wallet the automation acts on — is extracted based on event kind:
@@ -136,10 +82,10 @@ Every normalized payload carries `source`, `chain`, `chainFamily`, `event`, `top
 
 <Steps>
   <Step title="Preview the trigger">
-    `POST /automations/{id}/preview` returns how many wallets match and sample profiles. Zero matches means the trigger is wrong — usually the contract address or chain slug.
+    Preview returns how many wallets match, plus sample profiles. Zero matches means the trigger is wrong — usually the contract address or chain slug.
   </Step>
   <Step title="Post one real event">
-    Send a single event with a known wallet and confirm `matchedAutomations` is 1.
+    Trigger the activity with a wallet you control and confirm the automation registered an entry for it.
   </Step>
   <Step title="Confirm each node fired">
     Check the automation's entries. A `node_skipped` event means the step was reachable but declined to run — suppressed recipients or blocked sending reputation.

@@ -70,7 +70,7 @@ If a campaign's audience resolves to nobody — an empty segment, or criteria th
 Treat scheduling as a reminder, not a delivery mechanism — set a calendar alert and launch by hand at the intended time.
 </Warning>
 
-When you do schedule, the send instant comes entirely from the `scheduleDate` timestamp, which must be a full ISO-8601 UTC value. The separate `scheduleTime` and `timezone` fields are stored as metadata but don't affect timing.
+When you do schedule, the date you pick is the one that counts. The separate time and timezone fields are recorded alongside it but don't currently affect when the campaign would send.
 
 ## Tracking
 
@@ -103,14 +103,14 @@ Email and in-app share **one monthly message allowance** — they aren't metered
 
 | Plan | Messages/month | Contacts |
 | --- | --- | --- |
-| Free | 500 | 1,000 |
-| Launch | 15,000 | 5,000 |
-| Starter | 25,000 | 25,000 |
-| Growth | 100,000 | 100,000 |
-| Pro | 250,000 | 250,000 |
-| Pro Plus | 1,000,000 | 1,000,000 |
+| **Pay as you go** | Metered — pay per message | 25,000 |
+| **Launch** — $29/mo | 15,000 | 5,000 |
+| **Growth** — $199/mo | 100,000 | 100,000 |
+| **Pro** — $499/mo | 250,000 | 250,000 |
 
-The allowance is checked at launch against your estimated recipients plus what you've already sent this calendar month. Exceeding it returns `402 PLAN_LIMIT_EXCEEDED`. Warnings fire at 75% and 95%.
+The allowance is checked at launch against your estimated recipients plus what you've already sent this calendar month, and the send is blocked if it wouldn't fit. Warnings appear at 75% and 95% of the allowance.
+
+On **Pay as you go** there's no monthly cap — sends are metered against your balance instead, so a launch is blocked when the balance won't cover it rather than when an allowance runs out. Top up before a large send.
 
 ## Where to go next
 

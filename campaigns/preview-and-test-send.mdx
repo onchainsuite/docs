@@ -7,31 +7,15 @@ Campaigns depend on dynamic wallet traits and merge variables, so most send fail
 
 ## Preview
 
-Preview renders the campaign exactly as the send pipeline would, and returns the HTML, the plain-text version, any unresolved merge fields, and any warnings.
+Preview renders the campaign exactly as the send pipeline would — the HTML, the plain-text version, any unresolved merge fields, and any warnings.
 
-```bash
-curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/preview \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "recipient": { "email": "reviewer@example.com" } }'
-```
+Preview as a specific contact to check how personalization resolves for a real recipient. You can also override individual fields, which lets you test edge cases — a contact with no first name, or no ENS — without creating test data.
 
-Pass a `recipient` to render as a specific contact. Anything you supply is merged over the stored contact, so you can preview edge cases — a contact with no first name, or no ENS — without creating test data.
-
-```json
-{ "recipient": { "email": "reviewer@example.com", "firstName": "" } }
-```
-
-The response's `missingFields` is the list that will block your launch. Treat a non-empty `missingFields` as a failing check even when the preview looks fine.
+The **missing fields** list is what will block your launch. Treat a non-empty list as a failing check even when the preview looks fine.
 
 ## Test send
 
-```bash
-curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/send-test \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "to": "reviewer@example.com" }'
-```
-
-`to` is required. The same content overrides available to preview work here too.
+Send the rendered campaign to a single address for review. The same content overrides available in preview work here too.
 
 <Warning>
 **Test sends are invisible to analytics.** They carry no tracking pixel and no click wrapping, and record no delivery event. Opening or clicking a test email will never appear in campaign results — and can't be used to verify that tracking works.
@@ -39,13 +23,13 @@ curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/send-test \
 
 Test sends also skip the plan allowance check, so they won't consume your monthly messages.
 
-### Test send errors
+### Why a test send fails
 
-| Code | Meaning |
+| Problem | Meaning |
 | --- | --- |
-| `EMAIL_BODY_EMPTY` | Both HTML and text are blank |
-| `EMAIL_PROVIDER_PAYLOAD_INVALID` | A required field is missing — the response lists which |
-| `EMAIL_RENDER_VALIDATION_FAILED` | Unresolved merge variables, with a hint on fixing them |
+| Empty body | Both the HTML and text versions are blank |
+| Missing required field | A required field such as subject or sender isn't set |
+| Unresolved merge variables | A variable renders blank and has no `default` fallback |
 
 ## What to verify
 

@@ -52,57 +52,9 @@ Use a campaign for a one-time send to a defined cohort — a product update, min
 - Every merge variable has a fallback
 - Audience estimate reviewed, including the smart-sending exclusion count
 
-## Over the API
+## Duplicating a campaign
 
-Base path `https://api.onchainsuite.com/api/v1`. Reads allow any role; writes need `OWNER`, `ADMIN`, or `EDITOR`; delete needs `OWNER` or `ADMIN`.
-
-```bash
-# Create
-curl -X POST https://api.onchainsuite.com/api/v1/campaigns \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "name": "Base minters — claim reminder", "subject": "Your claim is live" }'
-
-# Set the audience
-curl -X PUT https://api.onchainsuite.com/api/v1/campaigns/$ID/audience \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "profileIds": [], "segmentIds": ["seg_base_minters"] }'
-
-# Estimate before you commit
-curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/audience/estimate \
-  -H "x-org-id: $ORG_ID"
-# → { "recipientCount": 1240, "excludedBySmartSending": 0 }
-
-# Validate
-curl -X POST https://api.onchainsuite.com/api/v1/campaigns/$ID/validate \
-  -H "x-org-id: $ORG_ID"
-# → { "valid": true, "errors": [] }
-```
-
-<Note>
-Both `profileIds` and `segmentIds` are required arrays on the audience endpoint — send `[]` for the one you aren't using rather than omitting it.
-</Note>
-
-### Useful endpoints
-
-| Method | Path | Purpose |
-| --- | --- | --- |
-| `GET` | `/campaigns` | List — filter by `status`, `type`, `search` |
-| `POST` | `/campaigns` | Create a draft |
-| `PUT` | `/campaigns/{id}` | Update name, subject, sender, content |
-| `PUT` | `/campaigns/{id}/audience` | Set contacts and segments |
-| `POST` | `/campaigns/{id}/audience/estimate` | Recipient count |
-| `PUT` | `/campaigns/{id}/content` | Subject, preview text, sender fields |
-| `PUT` | `/campaigns/{id}/template` | Attach a template |
-| `PUT` | `/campaigns/{id}/tracking` | Open, click, UTM, smart sending |
-| `POST` | `/campaigns/{id}/validate` | Pre-launch checks |
-| `POST` | `/campaigns/{id}/preview` | Render without sending |
-| `POST` | `/campaigns/{id}/send-test` | Send to one address |
-| `POST` | `/campaigns/{id}/launch` | Send |
-| `POST` | `/campaigns/{id}/duplicate` | Copy as a new draft |
-| `GET` | `/campaigns/{id}/analytics` | Results |
-| `GET` | `/campaigns/{id}/events` | Audit trail |
-
-Duplicating copies content and audience but resets status to draft and clears stats — the fastest way to run a recurring send.
+Duplicating copies content and audience but resets the status to draft and clears stats — the fastest way to run a recurring send without rebuilding it.
 
 ## Goals
 
@@ -116,7 +68,7 @@ A campaign can carry conversion goals measured over an attribution window (1–9
 | `email_click` | Email clicks |
 
 <Warning>
-`email_open` and `email_click` goals always report zero — they look for recipient data under a key the send pipeline doesn't write. Use the [campaign analytics](/campaigns/launch-and-monitor) endpoint for open and click rates instead, which reads the events correctly.
+`email_open` and `email_click` goals always report zero — they look for recipient data under a key the send pipeline doesn't write. Use [campaign analytics](/campaigns/launch-and-monitor) for open and click rates instead, which reads the events correctly.
 </Warning>
 
 Goal measurement covers up to 10,000 contacts and flags the result as truncated beyond that.

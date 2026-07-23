@@ -102,70 +102,41 @@ A wallet is enriched per chain, so metrics reflect the chain you enriched it on.
   <Step title="On project-settings save (automatic)">
     Saving project settings that include contract addresses enriches the holders of those contracts in the background.
   </Step>
-  <Step title="On demand (API)">
-    Enqueue enrichment for a specific wallet, your contacts, or a contract's holders — see below.
+  <Step title="On demand">
+    Refresh a specific wallet, your contacts, or a contract's holders whenever you need current numbers.
   </Step>
 </Steps>
 
-There is no fixed re-enrichment schedule — freshness is driven by the 7-day staleness check on view. Force a refresh any time with `forceRefresh`.
+There is no fixed re-enrichment schedule — freshness is driven by the 7-day staleness check on view. You can force a refresh at any time, which bypasses the response cache.
 
 ## Enriching on demand
 
-These are session-authenticated dashboard endpoints (send your session plus `x-org-id`), and require `OWNER`, `ADMIN`, or `EDITOR`. Base path `https://api.onchainsuite.com/api/v1`.
+Three ways to enrich beyond the automatic paths:
 
-### One wallet
-
-```bash
-curl -X POST https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/wallets/enqueue \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "walletAddress": "0xabc...", "chain": "base-mainnet" }'
-```
-
-Returns either `{ "queued": true, "jobId": "…" }` when a queue is available, or `{ "queued": false, "result": { … } }` when it ran inline. Pass `"forceRefresh": true` to bypass the cache.
-
-### Wait for the result
-
-When you need the metrics back in the same request, use the blocking variant. It polls until the wallet's `last_enriched_at` advances or it times out.
-
-```bash
-curl -X POST https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/wallets/enqueue-and-wait \
-  -H "x-org-id: $ORG_ID" -H "Content-Type: application/json" \
-  -d '{ "walletAddress": "0xabc...", "chain": "base-mainnet", "timeoutMs": 8000 }'
-```
-
-Returns `{ "ready": true, "metric": { … } }`, or `ready: false` if it didn't finish within the timeout (clamped to 1–25 seconds). The job keeps running either way.
-
-### Your contacts, or a contract's holders
-
-| Endpoint | Enriches |
+| Scope | What it does |
 | --- | --- |
-| `POST /intelligence/query/enrichment/contacts/enqueue` | The wallets of your most recently updated contacts (up to 200) |
-| `POST /intelligence/query/enrichment/protocol` | The holders of your configured contracts |
+| **One wallet** | Refreshes a single wallet on a chosen chain. Runs in the background, or returns the metrics directly when you need them immediately. |
+| **Your contacts** | Enriches the wallets of your most recently updated contacts, up to 200 at a time. |
+| **A contract's holders** | Discovers holders of a configured contract and enriches each one. |
 
-### Check status
+Enrichment is asynchronous — the request returns as soon as the work is queued. Progress is visible as a live queue count, and the workspace reports itself idle once everything has drained. Each wallet's `last_enriched_at` advances when its refresh completes, so you can also tell per wallet.
 
-```bash
-curl https://api.onchainsuite.com/api/v1/intelligence/query/enrichment/status \
-  -H "x-org-id: $ORG_ID"
-```
-
-Returns the count of enriched wallets, the most recent `lastEnrichedAt`, live queue counts, and an `idle` flag that's `true` once the queue has drained.
-
-Read a single wallet's stored metrics directly with `GET /intelligence/query/enrichment/wallets/{walletAddress}` (404 if it's never been enriched).
+<Note>
+Enrichment jobs are deduplicated per wallet and chain, so enqueuing the same wallet twice in quick succession won't double-spend credits.
+</Note>
 
 ## Cost and limits
 
 Enrichment consumes **GoldRush credits** — roughly 4 per wallet (it makes four data calls: balances, transactions, NFTs, and portfolio). Credits are a monthly allowance that scales with your plan:
 
-| Plan | Monthly GoldRush credits |
-| --- | --- |
-| Free / Launch | 10,000 |
-| Starter | 20,000 |
-| Growth | 75,000 |
-| Pro | 200,000 |
-| Pro Plus | 500,000 |
+| Plan | Monthly GoldRush credits | Roughly this many wallets |
+| --- | --- | --- |
+| **Pay as you go** | Metered against your balance | — |
+| **Launch** — $29/mo | 10,000 | ~2,500 |
+| **Growth** — $199/mo | 75,000 | ~18,000 |
+| **Pro** — $499/mo | 200,000 | ~50,000 |
 
-At ~4 credits per wallet, the free tier covers roughly 2,500 wallet enrichments a month. Exhausting the allowance returns `402 CREDITS_EXCEEDED`; the SQL editor and existing data keep working.
+Once the allowance is exhausted, new enrichment is blocked — the SQL editor and your already-enriched data keep working. On Pay as you go, enrichment draws from your balance rather than a monthly allowance.
 
 Responses are cached per organization — 5 minutes for transactions, 10 for balances and portfolio, 15 for NFTs — so repeated enrichment of the same wallet within those windows is served from cache and doesn't re-spend credits (unless you pass `forceRefresh`).
 
